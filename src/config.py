@@ -7,3 +7,4 @@ class Config:
     DB_USER = os.getenv("DB_USER", "postgres")
     DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
     TEAM_NAME = os.getenv("TEAM_NAME", "order-orchestration")
+
