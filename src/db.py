@@ -15,7 +15,7 @@ def get_db_connection():
 def get_team_secret():
     query = """
         SELECT secret
-        FROM secrets
+        FROM dtsecrets
         WHERE teamname = %s
         LIMIT 1
     """
