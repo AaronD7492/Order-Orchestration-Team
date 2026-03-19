@@ -16,7 +16,7 @@ def get_team_secret():
     query = """
         SELECT secret
         FROM secrets
-        WHERE team_name = %s
+        WHERE teamname = %s
         LIMIT 1
     """
 
