@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Checkout — Farm to Fork</title>
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/static/checkout.css" />
+</head>
+<body class="bg-light">
+
+  <!-- Navbar -->
+  <nav class="navbar bg-white border-bottom shadow-sm">
+    <div class="container">
+      <span class="navbar-brand fw-bold text-success fs-5">
+        <i class="bi bi-basket2-fill me-2"></i>Farm to Fork
+      </span>
+      <span class="text-muted small">
+        <i class="bi bi-lock-fill me-1 text-success"></i>Secure Checkout
+      </span>
+    </div>
+  </nav>
+
+  <div class="container py-5">
+    <h4 class="fw-bold mb-4">Checkout</h4>
+
+    <div class="row g-4 align-items-start">
+
+      <!-- ── Left: Order Summary ─────────────────────────────────────── -->
+      <div class="col-lg-5 order-lg-2">
+        <div class="card f2f-card shadow-sm">
+          <div class="card-header f2f-card-header">
+            <h6 class="mb-0 fw-semibold">
+              <i class="bi bi-cart3 me-2 text-success"></i>Order Summary
+            </h6>
+          </div>
+
+          <ul class="list-group list-group-flush">
+            {% for item in cart_items %}
+            <li class="list-group-item d-flex justify-content-between align-items-center py-3">
+              <div>
+                <div class="fw-semibold">{{ item.productName }}</div>
+                <div class="text-muted small">{{ item.productId }}</div>
+              </div>
+              <span class="badge bg-success-subtle text-success-emphasis rounded-pill px-3 py-2">
+                {{ item.quantity }} {{ item.unit }}
+              </span>
+            </li>
+            {% endfor %}
+          </ul>
+
+          <div class="card-footer f2f-card-footer d-flex justify-content-between align-items-center">
+            <span class="fw-semibold text-muted">Total Due</span>
+            <span class="fs-5 fw-bold text-success">Free</span>
+          </div>
+        </div>
+
+        <p class="text-muted small mt-3 text-center">
+          <i class="bi bi-shield-check me-1"></i>
+          Your food security benefits cover this order.
+        </p>
+      </div>
+
+      <!-- ── Right: Delivery Form ───────────────────────────────────── -->
+      <div class="col-lg-7 order-lg-1">
+        <div class="card f2f-card shadow-sm">
+          <div class="card-header f2f-card-header">
+            <h6 class="mb-0 fw-semibold">
+              <i class="bi bi-geo-alt me-2 text-success"></i>Delivery Details
+            </h6>
+          </div>
+
+          <div class="card-body p-4">
+            <form id="checkout-form" novalidate>
+
+              <!-- Address -->
+              <div class="mb-3">
+                <label class="form-label fw-semibold" for="addressLine1">
+                  Address Line 1 <span class="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="addressLine1"
+                  placeholder="123 King St W"
+                  required
+                />
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold" for="addressLine2">
+                  Address Line 2
+                  <span class="text-muted fw-normal">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="addressLine2"
+                  placeholder="Unit 5, Apt 2B, etc."
+                />
+              </div>
+
+              <div class="row g-3 mb-4">
+                <div class="col-sm-5">
+                  <label class="form-label fw-semibold" for="city">
+                    City <span class="text-danger">*</span>
+                  </label>
+                  <select class="form-select" id="city" required>
+                    <option value="" disabled selected>Select city</option>
+                    <option value="Waterloo">Waterloo</option>
+                    <option value="Kitchener">Kitchener</option>
+                    <option value="Cambridge">Cambridge</option>
+                  </select>
+                </div>
+
+                <div class="col-sm-3">
+                  <label class="form-label fw-semibold">Province</label>
+                  <input
+                    type="text"
+                    class="form-control bg-light text-muted"
+                    value="ON"
+                    readonly
+                  />
+                </div>
+
+                <div class="col-sm-4">
+                  <label class="form-label fw-semibold" for="postalCode">
+                    Postal Code <span class="text-danger">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="postalCode"
+                    placeholder="N2L 3G1"
+                    required
+                  />
+                </div>
+              </div>
+
+              <hr class="my-4" />
+
+              <!-- Delivery Preference -->
+              <h6 class="fw-semibold mb-3">
+                <i class="bi bi-truck me-2 text-success"></i>Delivery Preference
+              </h6>
+
+              <div class="row g-3 mb-4">
+                <div class="col-6">
+                  <input
+                    type="radio"
+                    class="btn-check"
+                    name="dropOff"
+                    id="dropOff-yes"
+                    value="true"
+                    checked
+                  />
+                  <label
+                    class="btn btn-outline-success w-100 delivery-option"
+                    for="dropOff-yes"
+                  >
+                    <i class="bi bi-box-arrow-in-down-left d-block fs-3 mb-2"></i>
+                    <strong>Drop Off</strong>
+                    <div class="small text-muted mt-1">Leave at door — no signature needed</div>
+                  </label>
+                </div>
+
+                <div class="col-6">
+                  <input
+                    type="radio"
+                    class="btn-check"
+                    name="dropOff"
+                    id="dropOff-no"
+                    value="false"
+                  />
+                  <label
+                    class="btn btn-outline-secondary w-100 delivery-option"
+                    for="dropOff-no"
+                  >
+                    <i class="bi bi-pen d-block fs-3 mb-2"></i>
+                    <strong>Signature Required</strong>
+                    <div class="small text-muted mt-1">You must be home to receive</div>
+                  </label>
+                </div>
+              </div>
+
+              <hr class="my-4" />
+
+              <!-- Payment note -->
+              <div class="d-flex align-items-center gap-2 mb-4 p-3 bg-success-subtle rounded">
+                <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                <div class="small">
+                  <strong class="text-success">No payment required.</strong>
+                  Your Farm to Fork food security benefits cover this order in full.
+                </div>
+              </div>
+
+              <!-- Error alert -->
+              <div id="error-alert" class="alert alert-danger d-none" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <span id="error-message"></span>
+              </div>
+
+              <!-- Submit -->
+              <button
+                type="submit"
+                class="btn btn-success btn-lg w-100"
+                id="submit-btn"
+              >
+                <span id="btn-text">
+                  <i class="bi bi-check-circle me-2"></i>Place Order
+                </span>
+                <span id="btn-spinner" class="d-none">
+                  <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                  Processing your order…
+                </span>
+              </button>
+
+            </form>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Success Modal ─────────────────────────────────────────────── -->
+  <div
+    class="modal fade"
+    id="successModal"
+    tabindex="-1"
+    data-bs-backdrop="static"
+    data-bs-keyboard="false"
+    aria-labelledby="successModalLabel"
+    aria-modal="true"
+    role="dialog"
+  >
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content text-center p-2">
+        <div class="modal-body py-5">
+          <div class="success-icon-wrap mb-3">
+            <i class="bi bi-check-circle-fill text-success" style="font-size:4rem;"></i>
+          </div>
+          <h4 class="fw-bold mb-1">Order Placed!</h4>
+          <p class="text-muted mb-4">Your Farm to Fork package is being prepared.</p>
+
+          <div class="bg-light rounded-3 p-3 text-start mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="text-muted small">Order ID</span>
+              <span class="fw-semibold small font-monospace" id="success-f2f-id">—</span>
+            </div>
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="text-muted small">Shipping ID</span>
+              <span class="fw-semibold small font-monospace" id="success-shipping-id">—</span>
+            </div>
+          </div>
+
+          <p class="text-muted small mb-0">
+            <i class="bi bi-truck me-1"></i>
+            The Delivery Execution team will handle your delivery from here.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const form       = document.getElementById('checkout-form');
+    const submitBtn  = document.getElementById('submit-btn');
+    const btnText    = document.getElementById('btn-text');
+    const btnSpinner = document.getElementById('btn-spinner');
+    const errorAlert = document.getElementById('error-alert');
+    const errorMsg   = document.getElementById('error-message');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const addressLine1 = document.getElementById('addressLine1').value.trim();
+      const city         = document.getElementById('city').value;
+      const postalCode   = document.getElementById('postalCode').value.trim();
+
+      if (!addressLine1 || !city || !postalCode) {
+        showError('Please fill in all required fields before placing your order.');
+        return;
+      }
+
+      const dropOff = document.querySelector('input[name="dropOff"]:checked').value === 'true';
+
+      setLoading(true);
+      hideError();
+
+      const payload = {
+        addressLine1,
+        addressLine2: document.getElementById('addressLine2').value.trim(),
+        city,
+        province: 'ON',
+        postalCode,
+        dropOff,
+      };
+
+      try {
+        const res  = await fetch('/checkout/submit', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(payload),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          if (data.error === 'out_of_stock') {
+            showError(
+              'One or more items in your cart are currently out of stock. ' +
+              'Please adjust your cart and try again.'
+            );
+          } else if (data.error === 'lock_expired') {
+            showError(
+              'Order could not be finalised. Please try again.'
+            );
+          } else {
+            showError(data.message || 'Something went wrong. Please try again.');
+          }
+          setLoading(false);
+          return;
+        }
+
+        document.getElementById('success-f2f-id').textContent     = data.f2fOrderId;
+        document.getElementById('success-shipping-id').textContent = data.shippingId;
+
+        const modal = new bootstrap.Modal(document.getElementById('successModal'));
+        modal.show();
+
+      } catch (err) {
+        showError('Unable to reach the server. Please check your connection and try again.');
+        setLoading(false);
+      }
+    });
+
+    function setLoading(on) {
+      submitBtn.disabled = on;
+      btnText.classList.toggle('d-none', on);
+      btnSpinner.classList.toggle('d-none', !on);
+    }
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorAlert.classList.remove('d-none');
+      errorAlert.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function hideError() {
+      errorAlert.classList.add('d-none');
+    }
+  </script>
+</body>
+</html>

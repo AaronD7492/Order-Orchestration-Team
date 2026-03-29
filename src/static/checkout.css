@@ -1,0 +1,70 @@
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  min-height: 100vh;
+}
+
+/* Cards */
+.f2f-card {
+  border: none;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.f2f-card-header {
+  background: #fff;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 1rem 1.25rem;
+}
+
+.f2f-card-footer {
+  background: #fff;
+  border-top: 1px solid #f0f0f0;
+  padding: 0.875rem 1.25rem;
+}
+
+/* Delivery option toggle buttons */
+.delivery-option {
+  padding: 1rem 0.75rem;
+  border-radius: 10px !important;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  cursor: pointer;
+}
+
+.delivery-option:hover {
+  box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.1);
+}
+
+.btn-check:checked + .delivery-option {
+  box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.25);
+}
+
+/* Form controls */
+.form-control:focus,
+.form-select:focus {
+  border-color: #198754;
+  box-shadow: 0 0 0 0.2rem rgba(25, 135, 84, 0.2);
+}
+
+/* Submit button */
+#submit-btn {
+  border-radius: 10px;
+  padding: 0.875rem;
+  font-size: 1rem;
+  transition: opacity 0.15s ease;
+}
+
+#submit-btn:disabled {
+  opacity: 0.75;
+}
+
+/* Success modal */
+.modal-content {
+  border: none;
+  border-radius: 16px;
+}
+
+/* Navbar brand spacing */
+.navbar {
+  padding: 0.75rem 0;
+}
+
