@@ -170,8 +170,13 @@ jobs:
 
       - name: Start Flask app
         run: |
-          python src/app.py &
+          python -m src.app > flask.log 2>&1 &
           sleep 5
+          cat flask.log
+
+      - name: Verify app is reachable
+        run: |
+          curl http://127.0.0.1:5000/secret
 
       - name: Run system tests
         run: |
