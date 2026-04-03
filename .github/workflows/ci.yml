@@ -193,3 +193,20 @@ jobs:
       - name: Build Docker image
         run: |
           docker build -t order-orchestration-service .
+
+  deploy_test:
+    needs: docker_build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to test server over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.TEST_SERVER_HOST }}
+          username: ${{ secrets.TEST_SERVER_USER }}
+          password: ${{ secrets.TEST_SERVER_PASSWORD }}
+          script: |
+            cd /root/Order-Orchestration-Team
+            git pull origin main
+            bash scripts/deploy.sh
