@@ -1,4 +1,4 @@
-name: Sprint 1 CI
+name: Order Orchestration Sprint 2 CI
 
 on:
   push:
@@ -25,12 +25,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run flake8
+      - name: Run linting
         run: |
           flake8 src tests --max-line-length=100
 
   unit_tests:
-    needs: [lint]
+    needs: lint
     runs-on: ubuntu-latest
 
     steps:
@@ -50,3 +50,141 @@ jobs:
       - name: Run unit tests
         run: |
           pytest tests/unit -v
+
+  integration_tests:
+    needs: unit_tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: sprint2db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d sprint2db"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: sprint2db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      TEAM_NAME: Integration Team
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run integration tests
+        run: |
+          pytest tests/integration -v
+
+  system_tests:
+    needs: integration_tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: sprint2db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d sprint2db"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: sprint2db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      TEAM_NAME: System Team
+      SYSTEM_TEST_BASE_URL: http://127.0.0.1:5000
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Seed database
+        run: |
+          python - <<'PY'
+          import psycopg2
+
+          conn = psycopg2.connect(
+              host="localhost",
+              port=5432,
+              dbname="sprint2db",
+              user="postgres",
+              password="postgres"
+          )
+
+          cur = conn.cursor()
+          cur.execute("""
+              CREATE TABLE IF NOT EXISTS dtsecrets (
+                  teamname TEXT PRIMARY KEY,
+                  secret TEXT NOT NULL
+              )
+          """)
+          cur.execute("DELETE FROM dtsecrets WHERE teamname = %s", ("System Team",))
+          cur.execute(
+              "INSERT INTO dtsecrets (teamname, secret) VALUES (%s, %s)",
+              ("System Team", "systemSecret456")
+          )
+          conn.commit()
+          cur.close()
+          conn.close()
+          PY
+
+      - name: Start Flask app
+        run: |
+          python src/app.py &
+          sleep 5
+
+      - name: Run system tests
+        run: |
+          pytest tests/system -v
+
+  docker_build:
+    needs: system_tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t order-orchestration-service .
