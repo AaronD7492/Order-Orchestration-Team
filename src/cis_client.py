@@ -105,17 +105,22 @@ def request_order_lock(f2f_order_id, shipping_address, manifest):
     except requests.exceptions.RequestException as e:
         raise CISError(f"CIS unreachable: {e}", 503)
 
+    try:
+        data = response.json()
+    except Exception:
+        data = {}
+
     if response.status_code == 409:
         raise InsufficientStockError(
-            response.json().get("message", "Insufficient stock for one or more items"),
+            data.get("message", "Insufficient stock for one or more items"),
             409,
         )
     if not response.ok:
         raise CISError(
-            response.json().get("message", "CIS error"),
+            data.get("message", f"CIS error {response.status_code}"),
             response.status_code,
         )
-    return response.json()
+    return data
 
 
 def ship_locked_order(lock_order_id, lock_token):
@@ -143,8 +148,12 @@ def ship_locked_order(lock_order_id, lock_token):
     except requests.exceptions.RequestException as e:
         raise CISError(f"CIS unreachable: {e}", 503)
 
-    if response.status_code == 409:
+    try:
         data = response.json()
+    except Exception:
+        data = {}
+
+    if response.status_code == 409:
         if data.get("status") == "ship-lock-expired":
             raise LockExpiredError(
                 data.get("message", "Lock expired after 60 seconds"),
@@ -153,7 +162,7 @@ def ship_locked_order(lock_order_id, lock_token):
         raise InsufficientStockError(data.get("message", "Insufficient stock"), 409)
     if not response.ok:
         raise CISError(
-            response.json().get("message", "CIS error"),
+            data.get("message", f"CIS error {response.status_code}"),
             response.status_code,
         )
-    return response.json()
+    return data
