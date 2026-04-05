@@ -1,8 +1,11 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 
+import requests
 from flask import Flask, jsonify, redirect, render_template, request, session
 
+from src.agnet_client import AgNetError, get_product_catalog
 from src.cis_client import (
     CISError,
     InsufficientStockError,
@@ -12,6 +15,7 @@ from src.cis_client import (
     ship_locked_order,
     ship_order,
 )
+from src.cfp_client import sync_primary_files
 from src.config import Config
 from src.db import get_team_secret
 from src.ods_client import submit_delivery
@@ -20,6 +24,67 @@ from src.ods_client import submit_delivery
 def create_app():
     app = Flask(__name__)
     app.secret_key = Config.SECRET_KEY
+
+    # Sync CFP primary files on startup — non-blocking, failure is logged only
+    try:
+        sync_primary_files()
+    except Exception as e:
+        logging.getLogger(__name__).warning("CFP startup sync failed: %s", e)
+
+    # ------------------------------------------------------------------
+    # Homepage — shop (inventory from CIS + AgNet catalog)
+    # ------------------------------------------------------------------
+
+    @app.route("/", methods=["GET"])
+    def index():
+        """
+        Customer-facing shop. Fetches live inventory from CIS (warehouse stock)
+        and the AgNet product catalog (supplier offerings) to build the shop.
+
+        CIS inventory = what can be ordered RIGHT NOW (productIds used for checkout lock).
+        AgNet catalog = full supplier product range shown as the browsable catalog.
+        """
+        _log = logging.getLogger(__name__)
+
+        # Fetch CIS pooled inventory (warehouse stock — authoritative for checkout)
+        cis_items = []
+        try:
+            cis_resp = requests.get(
+                f"{Config.CIS_BASE_URL}/inventory/pooled",
+                headers={"X-API-Key": Config.CIS_API_KEY},
+                timeout=8,
+            )
+            cis_resp.raise_for_status()
+            cis_items = cis_resp.json().get("items", [])
+        except Exception as e:
+            _log.warning("CIS inventory fetch failed: %s", e)
+
+        # Fetch AgNet vendor catalog (deduplicated by productId)
+        agnet_catalog = {}
+        try:
+            agnet_catalog = get_product_catalog()
+        except AgNetError as e:
+            _log.warning("AgNet catalog fetch failed: %s", e)
+
+        return render_template(
+            "index.html",
+            cis_items=cis_items,
+            agnet_catalog=list(agnet_catalog.values()),
+        )
+
+    @app.route("/api/inventory", methods=["GET"])
+    def api_inventory():
+        """Proxy to CIS pooled inventory — used by JS if it needs fresh data."""
+        try:
+            resp = requests.get(
+                f"{Config.CIS_BASE_URL}/inventory/pooled",
+                headers={"X-API-Key": Config.CIS_API_KEY},
+                timeout=8,
+            )
+            resp.raise_for_status()
+            return jsonify(resp.json()), 200
+        except Exception as e:
+            return jsonify({"error": str(e)}), 503
 
     # ------------------------------------------------------------------
     # Sprint 1 — team secret
@@ -220,8 +285,8 @@ def create_app():
         lock_order_id = lock_result["lockOrderId"]
         lock_token = lock_result["lockToken"]
 
-        # Step 2: Mock payment — always succeeds
-        # TODO: Integrate real payment processor when payment sprint begins.
+        # Step 2: Mock payment,
+        # TODO:Possibly Integrate real payment processor when sprint3 begins.
 
         # Step 3: Ship — happens immediately after lock, well within 60s TTL
         try:
@@ -250,6 +315,13 @@ def create_app():
             "postalCode": body["postalCode"],
         }
         submit_delivery(f2f_order_id, shipping_id, destination, drop_off)
+
+        # Step 5: Notify C&S team — increment their delivery category counts
+        # C&S exposes POST /update-delivery { client_id, produce, meat, dairy }
+        # client_id comes from the C&S JWT (session["user_token"]).
+        # TODO: decode JWT → extract client_id, then call C&S /update-delivery
+        #       once C&S confirms their server URL and JWT_PASS is shared.
+        #       Category counts can be derived from cart_items[*].category field.
 
         # Clear checkout session after successful order
         session.pop("cart_items", None)
