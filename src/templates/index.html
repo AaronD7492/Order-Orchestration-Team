@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Farm2Fork — Shop</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <style>
+    /* ── Cart panel ─────────────────────────────────── */
+    .cart-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 340px;
+      height: 100%;
+      background: #fff;
+      z-index: 400;
+      transform: translateX(100%);
+      transition: transform 0.28s ease;
+      box-shadow: -4px 0 20px rgba(0,0,0,0.12);
+      display: flex;
+      flex-direction: column;
+    }
+    .cart-panel.open { transform: translateX(0); }
+
+    .cart-panel-header {
+      background: var(--green);
+      padding: 1.2rem 1.4rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .cart-panel-header h2 { color: #fff; font-size: 1.1rem; }
+
+    .cart-items-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.8rem 0;
+    }
+
+    .cart-empty {
+      padding: 2rem 1.4rem;
+      text-align: center;
+      font-family: Arial, sans-serif;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .cart-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.85rem 1.4rem;
+      border-bottom: 1px solid var(--border);
+      gap: 0.8rem;
+    }
+    .cart-item-info { flex: 1; }
+    .cart-item-name { font-size: 0.9rem; font-weight: 600; color: var(--text); }
+    .cart-item-qty  { font-size: 0.78rem; color: var(--muted); font-family: Arial, sans-serif; margin-top: 2px; }
+
+    .cart-item-remove {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 1.1rem;
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      line-height: 1;
+      transition: color 0.15s, background 0.15s;
+    }
+    .cart-item-remove:hover { color: #dc2626; background: #fee2e2; }
+
+    .cart-footer {
+      padding: 1.2rem 1.4rem;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .cart-total {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 1rem;
+    }
+    .cart-total-value { color: var(--green); }
+
+    .checkout-btn {
+      width: 100%;
+      padding: 0.85rem;
+      background: var(--green);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-family: Arial, sans-serif;
+      font-size: 0.9rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .checkout-btn:hover { background: var(--green-dark); }
+    .checkout-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Quantity control inside product card ────────── */
+    .qty-control {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .qty-btn {
+      background: var(--green-light);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      width: 26px;
+      height: 26px;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      color: var(--green-dark);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.1s;
+    }
+    .qty-btn:hover { background: var(--green); color: #fff; }
+    .qty-input {
+      width: 48px;
+      text-align: center;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 3px 4px;
+      font-size: 0.85rem;
+      font-family: Arial, sans-serif;
+    }
+
+    /* ── Category badge on product card ─────────────── */
+    .product-category {
+      font-size: 0.7rem;
+      font-weight: bold;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--green-dark);
+      background: var(--green-light);
+      padding: 2px 7px;
+      border-radius: 12px;
+      display: inline-block;
+      margin-bottom: 4px;
+    }
+
+    /* ── Stock indicator ─────────────────────────────── */
+    .stock-label {
+      font-family: Arial, sans-serif;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 0.4rem;
+    }
+    .stock-low { color: #d97706; }
+
+    /* ── Section tabs (CIS / AgNet) ──────────────────── */
+    .section-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 1rem;
+    }
+    .tab-btn {
+      padding: 5px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 20px;
+      background: #fff;
+      font-family: Arial, sans-serif;
+      font-size: 0.78rem;
+      font-weight: bold;
+      cursor: pointer;
+      color: var(--muted);
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      background: var(--green);
+      border-color: var(--green);
+      color: #fff;
+    }
+
+    .product-section { display: none; }
+    .product-section.active { display: block; }
+  </style>
+</head>
+<body>
+  <div id="header-placeholder"></div>
+
+  <!-- ── Cart panel ───────────────────────────────────── -->
+  <aside class="cart-panel" id="cartPanel" role="dialog" aria-label="Shopping cart" aria-modal="true">
+    <div class="cart-panel-header">
+      <h2>Your Cart</h2>
+      <button class="close-btn" onclick="closeCart()" aria-label="Close cart">✕</button>
+    </div>
+    <div class="cart-items-list" id="cartItemsList">
+      <p class="cart-empty">Your cart is empty.</p>
+    </div>
+    <div class="cart-footer">
+      <div class="cart-total">
+        <span>Total</span>
+        <span class="cart-total-value">Free</span>
+      </div>
+      <button class="checkout-btn" id="checkoutBtn" onclick="goToCheckout()" disabled>
+        Go to Checkout
+      </button>
+    </div>
+  </aside>
+  <div class="overlay" id="cartOverlay" onclick="closeCart()"></div>
+
+  <!-- ── Hero ─────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="hero-text">
+      <h1>Fresh From the Farm</h1>
+      <p>Order fresh produce, meat, and dairy sourced directly from local farms — delivered to your door at no cost.</p>
+    </div>
+    <span class="hero-badge">Community Program</span>
+  </section>
+
+  <!-- ── Page body ─────────────────────────────────────── -->
+  <div class="page-body">
+    <!-- Sidebar: category filters -->
+    <aside class="sidebar">
+      <h3>Categories</h3>
+      <ul id="categoryList">
+        <li><a href="#" class="active" onclick="filterCategory('all', this)">All Items</a></li>
+        <li><a href="#" onclick="filterCategory('Produce', this)">Produce</a></li>
+        <li><a href="#" onclick="filterCategory('Dairy', this)">Dairy</a></li>
+        <li><a href="#" onclick="filterCategory('Meat', this)">Meat</a></li>
+      </ul>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main-content">
+      <!-- Source tabs -->
+      <div class="section-tabs">
+        <button class="tab-btn active" onclick="switchTab('warehouse', this)">Warehouse Stock</button>
+        <button class="tab-btn" onclick="switchTab('supplier', this)">Supplier Catalog</button>
+      </div>
+
+      <!-- Tab: CIS warehouse inventory (for ordering — productIds work with checkout) -->
+      <div class="product-section active" id="tab-warehouse">
+        <div class="section-label">Available in Warehouse</div>
+        <div class="product-grid" id="warehouseGrid">
+          {% if cis_items %}
+            {% for item in cis_items %}
+            <div class="product-card" data-category="{{ item.hierarchy[0] }}" data-product-id="{{ item.productId }}" data-product-name="{{ item.productName }}" data-unit="{{ item.unit }}" data-stock="{{ item.quantityOnHand }}">
+              <div class="product-img">
+                <span>{{ item.hierarchy[0] }}</span>
+              </div>
+              <div class="product-info">
+                <span class="product-category">{{ item.hierarchy[0] }}</span>
+                <div class="product-name">{{ item.productName }}</div>
+                <div class="stock-label {% if item.quantityOnHand < 20 %}stock-low{% endif %}">
+                  {{ item.quantityOnHand }} {{ item.unit }} available
+                </div>
+                <div class="product-footer">
+                  <span class="product-price">Free</span>
+                  <div class="qty-control">
+                    <button class="qty-btn" onclick="adjustQty(this, -1)">−</button>
+                    <input class="qty-input" type="number" value="1" min="0.1" step="0.5" max="{{ item.quantityOnHand }}" />
+                    <button class="qty-btn" onclick="adjustQty(this, 1)">+</button>
+                  </div>
+                </div>
+                <button class="add-btn" style="width:100%;margin-top:8px;" onclick="addToCart(this)">Add to Cart</button>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <p style="color:var(--muted);font-family:Arial,sans-serif;font-size:0.9rem;">
+              Warehouse inventory unavailable. Please try again later.
+            </p>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Tab: AgNet supplier catalog (browse only — shows full supplier range) -->
+      <div class="product-section" id="tab-supplier">
+        <div class="section-label">Supplier Catalog (from AgNet)</div>
+        <div class="product-grid" id="supplierGrid">
+          {% if agnet_catalog %}
+            {% for product in agnet_catalog %}
+            <div class="product-card" data-category="{{ product.hierarchy[0] }}">
+              <div class="product-img">
+                <span>{{ product.hierarchy[0] }}</span>
+              </div>
+              <div class="product-info">
+                <span class="product-category">{{ product.vendorType if product.vendorType else product.hierarchy[0] }}</span>
+                <div class="product-name">{{ product.productName }}</div>
+                <div class="stock-label">
+                  {{ product.quantityAvailable }} {{ product.unit }} across {{ product.vendors | length }} supplier(s)
+                </div>
+                <div class="product-footer">
+                  <span class="product-price">Free</span>
+                  <span style="font-size:0.72rem;color:var(--muted);font-family:Arial,sans-serif;">Supplier stock</span>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <p style="color:var(--muted);font-family:Arial,sans-serif;font-size:0.9rem;">
+              Supplier catalog unavailable. Please try again later.
+            </p>
+          {% endif %}
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="footer-placeholder"></div>
+
+  <script src="/static/components.js"></script>
+  <script src="/static/shop.js"></script>
+
+  <script>
+    // Patch cart badge count into header after it loads
+    document.addEventListener("DOMContentLoaded", () => {
+      updateCartBadge();
+    });
+  </script>
+</body>
+</html>
