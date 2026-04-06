@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/checkout.css">
+</head>
+<body>
+    <div id="header-placeholder"></div>
+
+    <div class="checkout-page">
+        <h1 class="checkout-page-title">Checkout</h1>
+
+        <div class="checkout-container">
+            <!-- Left Column: Form -->
+            <div class="checkout-left">
+
+                <!-- Delivery Details Section -->
+                <div class="checkout-section">
+                    <div class="section-header">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                        </svg>
+                        <h2 class="section-title">DELIVERY DETAILS</h2>
+                    </div>
+
+                    <div class="field-group">
+                        <div class="form-field">
+                            <label for="addressLine1" class="form-label">Street Address <span class="required">*</span></label>
+                            <input type="text" id="addressLine1" class="form-input" placeholder="Enter street address" required>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="addressLine2" class="form-label">Address Line 2 <span class="optional">(Optional)</span></label>
+                            <input type="text" id="addressLine2" class="form-input" placeholder="Unit, Apt, Suite, etc.">
+                        </div>
+
+                        <div class="field-row">
+                            <div class="form-field">
+                                <label for="city" class="form-label">City <span class="required">*</span></label>
+                                <div class="select-wrapper">
+                                    <select id="city" class="form-select" required>
+                                        <option value="">Select a city</option>
+                                        <option value="Waterloo">Waterloo</option>
+                                        <option value="Kitchener">Kitchener</option>
+                                        <option value="Cambridge">Cambridge</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-field">
+                                <label for="province" class="form-label">Province <span class="optional">(Optional)</span></label>
+                                <input type="text" id="province" class="form-input" value="ON" disabled>
+                            </div>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="postalCode" class="form-label">Postal Code <span class="required">*</span></label>
+                            <input type="text" id="postalCode" class="form-input" placeholder="A1A 1A1" required>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Delivery Preference Section -->
+                <div class="checkout-section">
+                    <div class="section-header">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                            <path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+                        </svg>
+                        <h2 class="section-title">DELIVERY PREFERENCE</h2>
+                    </div>
+
+                    <div class="delivery-options">
+                        <div class="delivery-option active" data-option="drop_off">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                                <path d="M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm2-7h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11z"/>
+                            </svg>
+                            <div class="delivery-option-label">Drop Off</div>
+                            <div class="delivery-option-sub">Leave at door, no signature</div>
+                        </div>
+                        <div class="delivery-option" data-option="signature">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                            </svg>
+                            <div class="delivery-option-label">Signature Required</div>
+                            <div class="delivery-option-sub">Must be home to receive</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Payment Section -->
+                <div class="checkout-section">
+                    <div class="payment-banner">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                        <div>
+                            <strong>No payment required.</strong> Your Farm to Fork food security benefits cover this order in full.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Error alert -->
+                <div id="error-alert" class="checkout-section error-alert d-none">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                    </svg>
+                    <span id="error-message"></span>
+                </div>
+
+                <!-- Place Order Button -->
+                <div class="checkout-section">
+                    <button class="place-order-btn" id="orderBtn">
+                        <span id="btn-text">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
+                            </svg>
+                            Place Order
+                        </span>
+                        <span id="btn-spinner" class="d-none">Processing your order…</span>
+                    </button>
+                </div>
+
+            </div>
+
+            <!-- Right Column: Summary -->
+            <div class="checkout-right">
+                <div class="summary-box">
+                    <div class="summary-header">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                            <path d="M19 6h-2c0-2.76-2.24-5-5-5S7 3.24 7 6H5c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-7-3c1.66 0 3 1.34 3 3H9c0-1.66 1.34-3 3-3zm0 10c-2.21 0-4-1.79-4-4h2c0 1.1.9 2 2 2s2-.9 2-2h2c0 2.21-1.79 4-4 4z"/>
+                        </svg>
+                        <div class="summary-header-title">Order Summary</div>
+                    </div>
+
+                    <div class="summary-items">
+                        {% for item in cart_items %}
+                        <div class="summary-item">
+                            <div class="summary-item-info">
+                                <div class="summary-item-name">{{ item.productName }}</div>
+                                <div class="summary-item-qty">SKU: {{ item.productId }} | Qty: {{ item.quantity }} {{ item.unit }}</div>
+                            </div>
+                            <span class="summary-badge">In Cart</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="summary-total">
+                        <div class="summary-total-label">Total Due</div>
+                        <div class="summary-total-value">Free</div>
+                    </div>
+
+                    <div class="summary-note">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                        All items are covered by your Farm to Fork benefits. No out-of-pocket cost.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success Modal -->
+    <div class="modal-overlay" id="successModal" role="dialog" aria-modal="true">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Order Placed!</h2>
+            </div>
+            <div class="modal-body" style="text-align:center; padding: 28px 24px;">
+                <svg viewBox="0 0 24 24" width="56" height="56" fill="#2d6a2d" style="margin-bottom:12px;">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                </svg>
+                <p style="color:#6b7280; margin-bottom:20px;">Your Farm to Fork package is being prepared.</p>
+                <div style="background:#f4f6f4; border-radius:8px; padding:14px; text-align:left; font-size:13px; margin-bottom:16px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                        <span style="color:#6b7280;">Order ID</span>
+                        <span style="font-weight:600; font-family:monospace;" id="success-f2f-id">—</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;">
+                        <span style="color:#6b7280;">Shipping ID</span>
+                        <span style="font-weight:600; font-family:monospace;" id="success-shipping-id">—</span>
+                    </div>
+                </div>
+                <p style="color:#6b7280; font-size:13px;">The Delivery Execution team will handle your delivery from here.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="footer-placeholder"></div>
+
+    <script src="/static/components.js"></script>
+    <script src="/static/checkout.js"></script>
+</body>
+</html>
