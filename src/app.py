@@ -316,12 +316,29 @@ def create_app():
         }
         submit_delivery(f2f_order_id, shipping_id, destination, drop_off)
 
-        # Step 5: Notify C&S team — increment their delivery category counts
-        # C&S exposes POST /update-delivery { client_id, produce, meat, dairy }
-        # client_id comes from the C&S JWT (session["user_token"]).
-        # TODO: decode JWT → extract client_id, then call C&S /update-delivery
-        #       once C&S confirms their server URL and JWT_PASS is shared.
-        #       Category counts can be derived from cart_items[*].category field.
+        # Step 5: Notify C&S — increment their delivery category counts
+        user_token = session.get("user_token")
+        if user_token:
+            try:
+                import jwt as pyjwt
+                decoded = pyjwt.decode(
+                    user_token,
+                    Config.CS_JWT_PASS,
+                    algorithms=["HS256"],
+                )
+                client_id = decoded.get("client_id")
+                if client_id:
+                    # Tally cart items by category (Produce / Meat / Dairy)
+                    produce = sum(1 for i in cart_items if i.get("category") == "Produce")
+                    meat    = sum(1 for i in cart_items if i.get("category") == "Meat")
+                    dairy   = sum(1 for i in cart_items if i.get("category") == "Dairy")
+                    requests.post(
+                        f"{Config.CS_BASE_URL}/update-delivery",
+                        json={"client_id": client_id, "produce": produce, "meat": meat, "dairy": dairy},
+                        timeout=5,
+                    )
+            except Exception as e:
+                logging.getLogger(__name__).warning("C&S update-delivery failed: %s", e)
 
         # Clear checkout session after successful order
         session.pop("cart_items", None)

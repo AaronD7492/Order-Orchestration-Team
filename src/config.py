@@ -20,3 +20,5 @@ class Config:
     CFP_CACHE_DIR = os.getenv("CFP_CACHE_DIR", "cfp_cache")
     AGNET_BASE_URL = os.getenv("AGNET_BASE_URL", "http://146.190.243.241:8301/api/v1")
     AGNET_API_KEY = os.getenv("AGNET_API_KEY", "rnmhr3mo3wTDOXixi8BF0lTpA-ziln4knstoj5AcBFkbEZNP")
+    CS_BASE_URL = os.getenv("CS_BASE_URL", "http://localhost:7500")
+    CS_JWT_PASS = os.getenv("CS_JWT_PASS", "jwtpass123")
