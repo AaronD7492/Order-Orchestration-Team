@@ -22,3 +22,17 @@ class Config:
     AGNET_API_KEY = os.getenv("AGNET_API_KEY", "rnmhr3mo3wTDOXixi8BF0lTpA-ziln4knstoj5AcBFkbEZNP")
     CS_BASE_URL = os.getenv("CS_BASE_URL", "http://localhost:7500")
     CS_JWT_PASS = os.getenv("CS_JWT_PASS", "jwtpass123")
+
+    # Method-style accessors used by db.py (team convention)
+    @classmethod
+    def db_host(cls): return cls.DB_HOST
+    @classmethod
+    def db_port(cls): return int(cls.DB_PORT)
+    @classmethod
+    def db_name(cls): return cls.DB_NAME
+    @classmethod
+    def db_user(cls): return cls.DB_USER
+    @classmethod
+    def db_password(cls): return cls.DB_PASSWORD
+    @classmethod
+    def team_name(cls): return cls.TEAM_NAME
