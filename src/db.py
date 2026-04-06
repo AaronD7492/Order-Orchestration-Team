@@ -4,11 +4,11 @@ from src.config import Config
 
 def get_db_connection():
     return psycopg2.connect(
-        host=Config.DB_HOST,
-        port=Config.DB_PORT,
-        dbname=Config.DB_NAME,
-        user=Config.DB_USER,
-        password=Config.DB_PASSWORD
+        host=Config.db_host(),
+        port=Config.db_port(),
+        dbname=Config.db_name(),
+        user=Config.db_user(),
+        password=Config.db_password()
     )
 
 
@@ -23,11 +23,11 @@ def get_team_secret():
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            cursor.execute(query, (Config.TEAM_NAME,))
+            cursor.execute(query, (Config.team_name(),))
             row = cursor.fetchone()
 
             if row is None:
-                raise ValueError(f"No secret found for team '{Config.TEAM_NAME}'")
+                raise ValueError(f"No secret found for team '{Config.team_name()}'")
 
             return row[0]
     finally:

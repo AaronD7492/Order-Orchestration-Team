@@ -1,127 +1,133 @@
-# Order Orchestration — Sprint 2
+# Order Orchestration — C&S Integration Branch
 
-**Course:** PROG73020 | **Section:** 1 | **Team:** Order Orchestration
+**Course:** PROG73020 | **Section:** 1 | **Teams:** Order Orchestration × Customer & Subscription
 
-This branch (`dilraj`) contains the full Sprint 2 implementation of the Order Orchestration service for the Farm2Fork enterprise system.
-
----
-
-## What This Service Does
-
-Order Orchestration is the middle layer of the F2F platform. It:
-
-1. **Serves the customer-facing shop** — pulls live inventory from CIS (warehouse) and the full product catalog from AgNet (suppliers)
-2. **Manages the checkout flow** — receives cart from the homepage, collects shipping address, locks inventory in CIS, confirms the order, and hands off to Delivery Execution
-3. **Syncs client data from CFP** — downloads CSV files from the Community Food Partners SFTP server on startup
+This branch (`integrating-with-customer-and-subscriptions`) documents and tracks the integration work between the Order Orchestration team and the Customer & Subscription team.
 
 ---
 
-## Architecture
+## Integration Overview
+
+The Customer & Subscription (C&S) service handles user authentication and client records. Order Orchestration (OO) handles the shop, cart, and order placement. Together they form the full customer-facing flow:
 
 ```
-Customer (browser)
-       │
-       ▼
-  Order Orchestration (this service — port 5001)
-       │               │                  │
-       ▼               ▼                  ▼
-  CIS (inventory   AgNet (supplier    ODS (delivery
-   lock + ship)     catalog)          handoff — stub)
-       │
-  CFP SFTP (client data sync)
+[C&S Service — port 7500]          [OO Service — port 5001]
+  GET  /login        ──login──►   GET  /
+  POST /login        ◄──JWT────   POST /checkout/initiate
+  GET  /gettoken                  GET  /checkout
+  POST /update-delivery ◄──────   POST /checkout/submit
 ```
 
-**Integration with Customer & Subscription team:**
-- C&S handles login and issues a JWT
-- Their JWT is passed to our `/checkout/initiate` as `userToken`
-- After order success, we call C&S `POST /update-delivery` to update delivery counts (pending JWT_PASS sharing)
+### Full End-to-End Flow
+
+1. Customer logs in at C&S (`POST /login`) → receives JWT cookie
+2. Customer browses shop at OO (`GET /`) → live inventory from CIS + AgNet
+3. Customer adds items to cart → clicks "Go to Checkout"
+4. OO `POST /checkout/initiate` receives cart + C&S JWT, stores in session
+5. Customer fills shipping address on OO checkout page
+6. Customer clicks "Place Order" → OO `POST /checkout/submit`:
+   - Locks inventory in CIS (`POST /orders/request`)
+   - Ships locked order in CIS (`POST /orders/ship`)
+   - Stubs handoff to Delivery Execution team
+   - Notifies C&S (`POST /update-delivery`) to increment delivery counts
+7. Success modal shows `f2fOrderId` and `shippingId`
 
 ---
 
-## Running Locally
+## Running Both Services Together
 
-### 1. Install dependencies
+### 1. Start Customer & Subscription (clone their repo first)
 
 ```bash
+git clone https://github.com/MaksPyvo/Customer_-_Subscription_ESD.git CS_Team
+cd CS_Team
 pip install -r requirements.txt
 ```
 
-### 2. Set environment variables
+Create `CS_Team/.env`:
 
-```bash
-export CIS_API_KEY="S0MDKZEARVRd-_-ElR6viWycEosPIFNzTlaP8aTQIztJf9vT"
-export AGNET_API_KEY="rnmhr3mo3wTDOXixi8BF0lTpA-ziln4knstoj5AcBFkbEZNP"
-export ODS_API_KEY="kMJIoWBGA_A5xNOLH86NRc2yha_4N8n5u-r_zAmB6BZvDssj"
-export SECRET_KEY="your-secret-key"
-export DB_HOST=143.198.35.133
-export DB_NAME=farmforkdb
-export DB_USER=customer
-export DB_PASSWORD=subscribers
+```
+DB_HOST=143.198.35.133
+DB_NAME=farmforkdb
+DB_USER=customer
+DB_PASS=subscribers
+CFP_HOST=68.183.203.17
+CFP_PORT=22
+CFP_USER=sec1
+CFP_PASS=t&thmGV26cffZ@XoBrt0
+JWT_PASS=jwtpass123
 ```
 
-### 3. Run
+Run:
 
 ```bash
+python -m app.app
+# Starts on http://localhost:7500
+```
+
+### 2. Start Order Orchestration
+
+```bash
+cd Order-Orchestration-Team
+pip install -r requirements.txt
+
+CIS_API_KEY="S0MDKZEARVRd-_-ElR6viWycEosPIFNzTlaP8aTQIztJf9vT" \
+AGNET_API_KEY="rnmhr3mo3wTDOXixi8BF0lTpA-ziln4knstoj5AcBFkbEZNP" \
+SECRET_KEY="dev-secret" \
+DB_HOST=143.198.35.133 DB_NAME=farmforkdb DB_USER=customer DB_PASSWORD=subscribers \
 FLASK_APP=src/app.py flask run --port 5001
+# Starts on http://localhost:5001
 ```
 
-Or for a quick demo cart:
+### 3. Test the flow
 
-```
-http://localhost:5001/checkout/demo
+```bash
+# Login via C&S and get a JWT
+curl -c cookies.txt -X POST http://localhost:7500/login \
+  -d "username=S297&password=5195551809"
+
+JWT=$(curl -s -b cookies.txt http://localhost:7500/gettoken | python3 -c "import sys,json; print(json.load(sys.stdin)['jwt'])")
+
+# Initiate checkout on OO
+curl -c oo_cookies.txt -X POST http://localhost:5001/checkout/initiate \
+  -H "Content-Type: application/json" \
+  -d "{\"items\":[{\"productId\":\"WF-CARROTS\",\"productName\":\"Carrots\",\"quantity\":2.0,\"unit\":\"kg\"}],\"userToken\":\"$JWT\"}"
+
+# Submit order
+curl -b oo_cookies.txt -X POST http://localhost:5001/checkout/submit \
+  -H "Content-Type: application/json" \
+  -d '{"addressLine1":"721 King St.","city":"Kitchener","province":"ON","postalCode":"M0X3A6","dropOff":true}'
 ```
 
 ---
 
-## Key Routes
+## Integration Points
 
-| Method | Route | Description |
-|--------|-------|-------------|
-| `GET` | `/` | Customer shop — live CIS inventory + AgNet catalog |
-| `POST` | `/checkout/initiate` | Receives cart from homepage, stores in session |
-| `GET` | `/checkout` | Renders checkout form |
-| `POST` | `/checkout/submit` | Full order flow: CIS lock → ship → DE handoff |
-| `GET` | `/api/inventory` | JSON proxy to CIS pooled inventory |
-| `GET` | `/secret` | Team secret from shared DB |
-| `GET` | `/checkout/demo` | Dev shortcut — pre-fills cart for testing |
+### What's Implemented
 
----
+| Point | Status | Notes |
+|-------|--------|-------|
+| C&S JWT passed to OO at checkout initiate | Done | `userToken` field in `POST /checkout/initiate` |
+| OO reads C&S client data via CFP CSV cache | Done | `get_client(client_id)` in `cfp_client.py` |
+| OO notifies C&S after order placed | Stubbed | Needs C&S server URL + JWT_PASS confirmed |
+| C&S login → OO shop redirect | Manual | User navigates manually; no redirect yet |
 
-## External APIs
+### What's Pending
 
-| Service | Base URL | Purpose |
-|---------|----------|---------|
-| CIS | `http://138.197.144.135:8201/api/v1` | Inventory lock + ship |
-| AgNet | `http://146.190.243.241:8301/api/v1` | Supplier product catalog |
-| ODS | `http://178.128.226.23:8001/api/v1` | Delivery execution (stubbed) |
-| CFP | SFTP `68.183.203.17:22` | Client data CSV sync |
+- **C&S → OO redirect after login:** C&S could redirect to `http://localhost:5001` after successful login so the user lands directly on the shop
+- **JWT decoding in OO:** Decode the C&S JWT in `checkout/submit` to extract `client_id`, then call C&S `POST /update-delivery` automatically
+- **Shared session / SSO:** Currently two separate cookie jars — one per service
 
 ---
 
-## Source Layout
+## Known Issues
 
-```
-src/
-  app.py              # Flask routes
-  config.py           # Environment variable config
-  agnet_client.py     # AgNet vendor catalog fetching
-  cis_client.py       # CIS inventory lock + ship
-  cfp_client.py       # CFP SFTP sync
-  ods_client.py       # ODS delivery handoff (stubbed)
-  db.py               # PostgreSQL connection
-  static/
-    styles.css         # F2F shared design system
-    checkout.css       # Checkout page styles
-    checkout.js        # Checkout form + order submission
-    shop.js            # Homepage cart + filter logic
-    components.js      # Header/footer loader
-    header.html
-    footer.html
-  templates/
-    index.html         # Homepage / shop
-    checkout.html      # Checkout page
-tests/
-  unit/
-  integration/
-  system/
-```
+- **CIS Section 1 server instability:** `POST /orders/ship` returns 500 intermittently. This is a Section 1 infrastructure issue, not application code. The lock (`POST /orders/request`) works when CIS is healthy.
+- **C&S `POST /update-delivery` not yet called:** Needs `client_id` from decoded JWT and C&S server URL to be confirmed for cross-service calls.
+
+---
+
+## Repo Links
+
+- Order Orchestration: [AaronD7492/Order-Orchestration-Team](https://github.com/AaronD7492/Order-Orchestration-Team) — branch `dilraj`
+- Customer & Subscription: [MaksPyvo/Customer\_-\_Subscription\_ESD](https://github.com/MaksPyvo/Customer_-_Subscription_ESD)
