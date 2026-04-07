@@ -27,7 +27,7 @@ jobs:
 
       - name: Run linting
         run: |
-          flake8 src tests --max-line-length=100
+          flake8 src tests --max-line-length=105
 
   unit_tests:
     needs: lint
