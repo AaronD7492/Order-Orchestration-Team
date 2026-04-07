@@ -9,11 +9,11 @@ def test_get_team_secret_from_database(mock_get_db_connection):
 
     mock_get_db_connection.return_value = mock_conn
     mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
-    mock_cursor.fetchone.return_value = ("ORDER_SECRET_123",)
+    mock_cursor.fetchone.return_value = ("orderMaestros",)
 
     result = get_team_secret()
 
-    assert result == "ORDER_SECRET_123"
+    assert result == "orderMaestros"
     mock_cursor.execute.assert_called_once()
     mock_cursor.fetchone.assert_called_once()
     mock_conn.close.assert_called_once()
