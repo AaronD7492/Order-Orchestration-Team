@@ -362,11 +362,12 @@ def create_app():
                 if client_id:
                     # Tally cart items by category (Produce / Meat / Dairy)
                     produce = sum(1 for i in cart_items if i.get("category") == "Produce")
-                    meat    = sum(1 for i in cart_items if i.get("category") == "Meat")
-                    dairy   = sum(1 for i in cart_items if i.get("category") == "Dairy")
+                    meat = sum(1 for i in cart_items if i.get("category") == "Meat")
+                    dairy = sum(1 for i in cart_items if i.get("category") == "Dairy")
                     requests.post(
                         f"{Config.CS_BASE_URL}/update-delivery",
-                        json={"client_id": client_id, "produce": produce, "meat": meat, "dairy": dairy},
+                        json={"client_id": client_id, "produce": produce,
+                        "meat": meat, "dairy": dairy},
                         timeout=5,
                     )
             except Exception as e:
