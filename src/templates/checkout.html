@@ -3,9 +3,85 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Checkout</title>
+    <title>Checkout — Farm2Fork</title>
     <link rel="stylesheet" href="/static/styles.css">
     <link rel="stylesheet" href="/static/checkout.css">
+    <style>
+        /* Hide nav links and cart icon on checkout page */
+        header nav,
+        header .icon-btn[title="Cart"],
+        header .cart-badge { display: none !important; }
+
+        /* Cart item quantity controls in summary */
+        .summary-item { align-items: center; gap: 10px; }
+        .item-qty-control {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex-shrink: 0;
+        }
+        .item-qty-btn {
+            width: 26px; height: 26px;
+            border-radius: 50%;
+            border: 1.5px solid var(--border, #e2e8e2);
+            background: #fff;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            color: #2d6a2d;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.15s;
+            line-height: 1;
+        }
+        .item-qty-btn:hover { background: #2d6a2d; color: #fff; border-color: #2d6a2d; }
+        .item-qty-btn.remove { color: #dc2626; border-color: #fecaca; }
+        .item-qty-btn.remove:hover { background: #dc2626; color: #fff; border-color: #dc2626; }
+        .item-qty-display {
+            font-size: 0.85rem;
+            font-weight: 600;
+            min-width: 38px;
+            text-align: center;
+            color: #1a1a1a;
+        }
+
+        /* Back to shop link */
+        .back-to-shop {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 14px 22px;
+            border-top: 1px solid var(--border, #e2e8e2);
+            font-size: 13px;
+            color: #6b7280;
+            font-family: 'DM Sans', Arial, sans-serif;
+        }
+        .back-to-shop a {
+            color: #2d6a2d;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .back-to-shop a:hover { text-decoration: underline; }
+
+        /* Address display (pre-filled from CFP) */
+        .address-display {
+            background: #f4f6f4;
+            border: 1.5px solid #e2e8e2;
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 14px;
+            color: #1a1a1a;
+            line-height: 1.6;
+        }
+        .address-label {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin-bottom: 4px;
+        }
+    </style>
 </head>
 <body>
     <div id="header-placeholder"></div>
@@ -17,7 +93,7 @@
             <!-- Left Column: Form -->
             <div class="checkout-left">
 
-                <!-- Delivery Details Section -->
+                <!-- Delivery Details -->
                 <div class="checkout-section">
                     <div class="section-header">
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
@@ -26,43 +102,53 @@
                         <h2 class="section-title">DELIVERY DETAILS</h2>
                     </div>
 
-                    <div class="field-group">
-                        <div class="form-field">
-                            <label for="addressLine1" class="form-label">Street Address <span class="required">*</span></label>
-                            <input type="text" id="addressLine1" class="form-input" placeholder="Enter street address" required>
+                    {% if prefill and prefill.addressLine1 %}
+                        <!-- Address pre-filled from CFP — read only -->
+                        <div class="address-label">Delivering to</div>
+                        <div class="address-display">
+                            {{ prefill.addressLine1 }}{% if prefill.city %}, {{ prefill.city }}{% endif %}{% if prefill.province %}, {{ prefill.province }}{% endif %}{% if prefill.postalCode %} {{ prefill.postalCode }}{% endif %}
                         </div>
-
-                        <div class="form-field">
-                            <label for="addressLine2" class="form-label">Address Line 2 <span class="optional">(Optional)</span></label>
-                            <input type="text" id="addressLine2" class="form-input" placeholder="Unit, Apt, Suite, etc.">
-                        </div>
-
-                        <div class="field-row">
+                        <!-- Hidden fields sent with the order -->
+                        <input type="hidden" id="addressLine1" value="{{ prefill.addressLine1 }}">
+                        <input type="hidden" id="addressLine2" value="">
+                        <input type="hidden" id="city"         value="{{ prefill.city }}">
+                        <input type="hidden" id="province"     value="{{ prefill.province }}">
+                        <input type="hidden" id="postalCode"   value="{{ prefill.postalCode }}">
+                    {% else %}
+                        <!-- Fallback: editable form (demo mode / no JWT) -->
+                        <div class="field-group">
                             <div class="form-field">
-                                <label for="city" class="form-label">City <span class="required">*</span></label>
-                                <div class="select-wrapper">
-                                    <select id="city" class="form-select" required>
-                                        <option value="">Select a city</option>
-                                        <option value="Waterloo">Waterloo</option>
-                                        <option value="Kitchener">Kitchener</option>
-                                        <option value="Cambridge">Cambridge</option>
-                                    </select>
+                                <label for="addressLine1" class="form-label">Street Address <span class="required">*</span></label>
+                                <input type="text" id="addressLine1" class="form-input" placeholder="Enter street address">
+                            </div>
+                            <div class="form-field">
+                                <label for="addressLine2" class="form-label">Address Line 2 <span class="optional">(Optional)</span></label>
+                                <input type="text" id="addressLine2" class="form-input" placeholder="Unit, Apt, Suite, etc.">
+                            </div>
+                            <div class="field-row">
+                                <div class="form-field">
+                                    <label for="city" class="form-label">City <span class="required">*</span></label>
+                                    <div class="select-wrapper">
+                                        <select id="city" class="form-select">
+                                            <option value="">Select a city</option>
+                                            <option value="Waterloo">Waterloo</option>
+                                            <option value="Kitchener">Kitchener</option>
+                                            <option value="Cambridge">Cambridge</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-field">
+                                    <label for="province" class="form-label">Province</label>
+                                    <input type="text" id="province" class="form-input" value="ON" disabled>
                                 </div>
                             </div>
-                            <div class="form-field">
-                                <label for="province" class="form-label">Province <span class="optional">(Optional)</span></label>
-                                <input type="text" id="province" class="form-input" value="ON" disabled>
-                            </div>
                         </div>
-
-                        <div class="form-field">
-                            <label for="postalCode" class="form-label">Postal Code <span class="required">*</span></label>
-                            <input type="text" id="postalCode" class="form-input" placeholder="A1A 1A1" required>
-                        </div>
-                    </div>
+                        <input type="hidden" id="addressLine2" value="">
+                        <input type="hidden" id="postalCode" value="">
+                    {% endif %}
                 </div>
 
-                <!-- Delivery Preference Section -->
+                <!-- Delivery Preference -->
                 <div class="checkout-section">
                     <div class="section-header">
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
@@ -70,7 +156,6 @@
                         </svg>
                         <h2 class="section-title">DELIVERY PREFERENCE</h2>
                     </div>
-
                     <div class="delivery-options">
                         <div class="delivery-option active" data-option="drop_off">
                             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
@@ -89,15 +174,13 @@
                     </div>
                 </div>
 
-                <!-- Payment Section -->
+                <!-- Payment banner -->
                 <div class="checkout-section">
                     <div class="payment-banner">
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                         </svg>
-                        <div>
-                            <strong>No payment required.</strong> Your Farm to Fork food security benefits cover this order in full.
-                        </div>
+                        <div><strong>No payment required.</strong> Your Farm to Fork food security benefits cover this order in full.</div>
                     </div>
                 </div>
 
@@ -109,7 +192,7 @@
                     <span id="error-message"></span>
                 </div>
 
-                <!-- Place Order Button -->
+                <!-- Place Order -->
                 <div class="checkout-section">
                     <button class="place-order-btn" id="orderBtn">
                         <span id="btn-text">
@@ -121,10 +204,9 @@
                         <span id="btn-spinner" class="d-none">Processing your order…</span>
                     </button>
                 </div>
-
             </div>
 
-            <!-- Right Column: Summary -->
+            <!-- Right Column: Order Summary -->
             <div class="checkout-right">
                 <div class="summary-box">
                     <div class="summary-header">
@@ -134,17 +216,8 @@
                         <div class="summary-header-title">Order Summary</div>
                     </div>
 
-                    <div class="summary-items">
-                        {% for item in cart_items %}
-                        <div class="summary-item">
-                            <div class="summary-item-info">
-                                <div class="summary-item-name">{{ item.productName }}</div>
-                                <div class="summary-item-qty">SKU: {{ item.productId }} | Qty: {{ item.quantity }} {{ item.unit }}</div>
-                            </div>
-                            <span class="summary-badge">In Cart</span>
-                        </div>
-                        {% endfor %}
-                    </div>
+                    <!-- Cart items — managed by checkout.js -->
+                    <div class="summary-items" id="summaryItems"></div>
 
                     <div class="summary-total">
                         <div class="summary-total-label">Total Due</div>
@@ -157,6 +230,14 @@
                         </svg>
                         All items are covered by your Farm to Fork benefits. No out-of-pocket cost.
                     </div>
+
+                    <!-- Back to shop -->
+                    <div class="back-to-shop">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                        </svg>
+                        Forgetting something? <a href="/">Go back to shop</a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -168,7 +249,7 @@
             <div class="modal-header">
                 <h2>Order Placed!</h2>
             </div>
-            <div class="modal-body" style="text-align:center; padding: 28px 24px;">
+            <div class="modal-body" style="text-align:center; padding:28px 24px;">
                 <svg viewBox="0 0 24 24" width="56" height="56" fill="#2d6a2d" style="margin-bottom:12px;">
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                 </svg>
@@ -190,6 +271,10 @@
 
     <div id="footer-placeholder"></div>
 
+    <!-- Pass server-side cart to JS -->
+    <script>
+        window.__CART__ = {{ cart_items | tojson }};
+    </script>
     <script src="/static/components.js"></script>
     <script src="/static/checkout.js"></script>
 </body>

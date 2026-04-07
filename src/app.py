@@ -198,14 +198,41 @@ def create_app():
 
     @app.route("/checkout", methods=["GET"])
     def checkout():
-        """Render the checkout page, hydrated with cart items from session."""
+        """Render the checkout page, hydrated with cart items and CFP address."""
         cart_items = session.get("cart_items")
         if not cart_items:
             return (
                 jsonify({"error": "No cart found. Please start from the store."}),
                 400,
             )
-        return render_template("checkout.html", cart_items=cart_items)
+
+        # Try to pre-fill address from CFP using the C&S JWT
+        prefill = {}
+        user_token = session.get("user_token")
+        if user_token:
+            try:
+                import jwt as pyjwt
+                from src.cfp_client import get_client
+                decoded = pyjwt.decode(
+                    user_token, Config.CS_JWT_PASS, algorithms=["HS256"]
+                )
+                client = get_client(decoded.get("client_id", ""))
+                if client and client.get("address"):
+                    # Parse "721 King St., Kitchener, ON M0X3A6"
+                    addr = client["address"]
+                    parts = [p.strip() for p in addr.split(",")]
+                    if len(parts) >= 3:
+                        prov_postal = parts[-1].strip().split()
+                        prefill = {
+                            "addressLine1": parts[0],
+                            "city": parts[-2].strip(),
+                            "province": prov_postal[0] if prov_postal else "ON",
+                            "postalCode": prov_postal[1] if len(prov_postal) > 1 else "",
+                        }
+            except Exception as e:
+                logging.getLogger(__name__).warning("CFP address prefill failed: %s", e)
+
+        return render_template("checkout.html", cart_items=cart_items, prefill=prefill)
 
     # ------------------------------------------------------------------
     # Checkout — submit (full order flow)
@@ -237,11 +264,12 @@ def create_app():
         if not body:
             return jsonify({"error": "Invalid request body"}), 400
 
-        for field in ("addressLine1", "city", "province", "postalCode"):
+        for field in ("addressLine1", "city", "province"):
             if not body.get(field):
                 return jsonify({"error": f"Missing required field: {field}"}), 400
 
-        cart_items = session.get("cart_items")
+        # Accept updated cart from checkout page (user may have changed quantities)
+        cart_items = body.get("items") or session.get("cart_items")
         if not cart_items:
             return (
                 jsonify({"error": "No cart found. Please start from the store."}),
@@ -264,7 +292,11 @@ def create_app():
         parts = [body["addressLine1"]]
         if body.get("addressLine2"):
             parts.append(body["addressLine2"])
-        parts.append(f"{body['city']}, {body['province']} {body['postalCode']}")
+        postal = body.get("postalCode", "").strip()
+        city_line = f"{body['city']}, {body['province']}"
+        if postal:
+            city_line += f" {postal}"
+        parts.append(city_line)
         shipping_address = ", ".join(parts)
 
         # Generate unique F2F order ID
