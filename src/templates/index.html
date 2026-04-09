@@ -210,6 +210,17 @@
   </aside>
   <div class="overlay" id="cartOverlay" onclick="closeCart()"></div>
 
+  <!-- ── Auth bar ─────────────────────────────────────── -->
+  <div style="background:var(--green);padding:0.45rem 1.4rem;display:flex;justify-content:flex-end;align-items:center;gap:0.8rem;font-family:Arial,sans-serif;font-size:0.82rem;">
+    {% if client_id %}
+      <span style="color:rgba(255,255,255,0.85);">Logged in as <strong style="color:#fff;">{{ client_id }}</strong></span>
+      <a href="/logout" style="color:#fff;background:rgba(0,0,0,0.18);padding:4px 12px;border-radius:12px;text-decoration:none;font-weight:bold;">Log out</a>
+    {% else %}
+      <span style="color:rgba(255,255,255,0.8);">Sign in to enable checkout</span>
+      <a href="/login" style="color:#fff;background:rgba(0,0,0,0.18);padding:4px 12px;border-radius:12px;text-decoration:none;font-weight:bold;">Login with C&amp;S</a>
+    {% endif %}
+  </div>
+
   <!-- ── Hero ─────────────────────────────────────────── -->
   <section class="hero">
     <div class="hero-text">

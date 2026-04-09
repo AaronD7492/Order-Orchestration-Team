@@ -22,6 +22,8 @@ class Config:
     AGNET_API_KEY = os.getenv("AGNET_API_KEY", "rnmhr3mo3wTDOXixi8BF0lTpA-ziln4knstoj5AcBFkbEZNP")
     CS_BASE_URL = os.getenv("CS_BASE_URL", "http://localhost:7500")
     CS_JWT_PASS = os.getenv("CS_JWT_PASS", "jwtpass123")
+    CS_LOGIN_URL = os.getenv("CS_LOGIN_URL", "http://localhost:7500/login")
+    F2F_BASE_URL = os.getenv("F2F_BASE_URL", "http://localhost:5001")
 
     # Method-style accessors used by db.py (team convention)
     @classmethod

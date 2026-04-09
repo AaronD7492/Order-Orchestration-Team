@@ -12,6 +12,28 @@ def get_db_connection():
     )
 
 
+def get_customer(client_id, mobile):
+    """
+    Look up a customer by client_id and mobile number (C&S credentials).
+    Returns the customer row dict on success, None if not found.
+    """
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT client_id, address, produce, meat, dairy, delivery_count "
+                "FROM customer WHERE client_id = %s AND mobile = %s LIMIT 1",
+                (client_id, mobile),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            cols = ["client_id", "address", "produce", "meat", "dairy", "delivery_count"]
+            return dict(zip(cols, row))
+    finally:
+        conn.close()
+
+
 def get_team_secret():
     query = """
         SELECT secret

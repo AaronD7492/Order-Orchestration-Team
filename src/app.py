@@ -17,7 +17,7 @@ from src.cis_client import (
 )
 from src.cfp_client import sync_primary_files
 from src.config import Config
-from src.db import get_team_secret
+from src.db import get_customer, get_team_secret
 from src.ods_client import submit_delivery
 
 
@@ -70,6 +70,7 @@ def create_app():
             "index.html",
             cis_items=cis_items,
             agnet_catalog=list(agnet_catalog.values()),
+            client_id=session.get("client_id"),
         )
 
     @app.route("/api/inventory", methods=["GET"])
@@ -94,6 +95,88 @@ def create_app():
     def secret():
         secret_value = get_team_secret()
         return jsonify({"secret": secret_value}), 200
+
+    # ------------------------------------------------------------------
+    # C&S Authentication — login / callback / logout
+    # ------------------------------------------------------------------
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        """
+        GET  — render the login form.
+        POST — validate client_id + mobile against farmforkdb, issue JWT, store in session.
+        """
+        _log = logging.getLogger(__name__)
+
+        if request.method == "GET":
+            return render_template("login.html", error=None)
+
+        client_id = (request.form.get("client_id") or "").strip()
+        mobile    = (request.form.get("mobile") or "").strip()
+
+        if not client_id or not mobile:
+            return render_template("login.html", error="Please enter your Client ID and mobile number.")
+
+        try:
+            customer = get_customer(client_id, mobile)
+        except Exception as e:
+            _log.warning("DB error during login: %s", e)
+            return render_template("login.html", error="Service unavailable. Please try again.")
+
+        if not customer:
+            return render_template("login.html", error="Invalid Client ID or mobile number.")
+
+        import jwt as pyjwt
+        from datetime import timedelta
+        token = pyjwt.encode(
+            {
+                "client_id": customer["client_id"],
+                "exp": datetime.now(timezone.utc) + timedelta(hours=4),
+            },
+            Config.CS_JWT_PASS,
+            algorithm="HS256",
+        )
+        session["user_token"] = token
+        session["client_id"]  = customer["client_id"]
+
+        return redirect("/")
+
+    @app.route("/auth/cs", methods=["GET"])
+    def auth_cs():
+        """
+        Optional fallback — accepts a C&S-issued JWT via query param.
+        Primary login is handled by POST /login (direct DB validation).
+
+        Expected query param:
+            token=<jwt_token>   (the jwt_token issued by the C&S server)
+        """
+        _log = logging.getLogger(__name__)
+        token = request.args.get("token", "").strip()
+
+        if not token:
+            return redirect("/login")
+
+        try:
+            import jwt as pyjwt
+            decoded = pyjwt.decode(token, Config.CS_JWT_PASS, algorithms=["HS256"])
+            client_id = decoded.get("client_id")
+            if not client_id:
+                raise ValueError("JWT missing client_id")
+            session["user_token"] = token
+            session["client_id"] = client_id
+        except Exception as e:
+            _log.warning("C&S auth callback failed: %s", e)
+            return redirect("/login")
+
+        return redirect("/")
+
+    @app.route("/logout", methods=["GET"])
+    def logout():
+        """Clear the session and send the user back to the homepage."""
+        session.pop("user_token", None)
+        session.pop("client_id", None)
+        session.pop("cart_items", None)
+        return redirect("/")
 
     # ------------------------------------------------------------------
     # Legacy pass-through routes (kept for API testing / Sprint 1 work)
