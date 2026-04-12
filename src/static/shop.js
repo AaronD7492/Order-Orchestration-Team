@@ -88,12 +88,20 @@ function filterCategory(category, linkEl) {
   document.querySelectorAll("#categoryList a").forEach(a => a.classList.remove("active"));
   linkEl.classList.add("active");
 
-  // Filter visible product cards
+  // Filter warehouse/supplier product cards
   const activeTab = document.querySelector(".product-section.active");
-  if (!activeTab) return;
-  activeTab.querySelectorAll(".product-card").forEach(card => {
-    const match = category === "all" || card.dataset.category === category;
-    card.style.display = match ? "" : "none";
+  if (activeTab) {
+    activeTab.querySelectorAll(".product-card").forEach(card => {
+      const match = category === "all" || card.dataset.category === category;
+      card.style.display = match ? "" : "none";
+    });
+  }
+
+  // Filter package category groups
+  document.querySelectorAll(".package-category-group").forEach(group => {
+    const match = category === "all" ||
+      group.querySelector(".package-card").dataset.pkgCategory === category;
+    group.style.display = match ? "" : "none";
   });
 
   return false;
