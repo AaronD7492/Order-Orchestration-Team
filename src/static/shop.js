@@ -1,6 +1,6 @@
 // ── Supply Network config ────────────────────────────────────────────────────
 // Change this one line when deploying to the live server
-const SUPPLY_API_URL = "http://localhost:5002";
+const SUPPLY_API_URL = "http://165.22.230.110:5002";
 
 // ── Category emoji map ───────────────────────────────────────────────────────
 const CATEGORY_EMOJI = { Dairy: "🥛", Meat: "🥩", Produce: "🥦" };
