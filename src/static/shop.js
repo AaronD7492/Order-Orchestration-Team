@@ -1,4 +1,134 @@
-// ── Prepackaged bundle helpers ──────────────────────────────────────────────
+// ── Supply Network config ────────────────────────────────────────────────────
+// Change this one line when deploying to the live server
+const SUPPLY_API_URL = "http://localhost:5002";
+
+// ── Category emoji map ───────────────────────────────────────────────────────
+const CATEGORY_EMOJI = { Dairy: "🥛", Meat: "🥩", Produce: "🥦" };
+
+// ── Load packages from Supply Network API ───────────────────────────────────
+async function loadPackages() {
+  const container = document.getElementById("packagesContainer");
+  const loading   = document.getElementById("packagesLoading");
+
+  try {
+    const resp = await fetch(`${SUPPLY_API_URL}/api/inventory/packages`);
+    if (!resp.ok) throw new Error(`API returned ${resp.status}`);
+    const data = await resp.json();
+
+    // Group packages by category
+    const groups = {};
+    data.packages.forEach(pkg => {
+      if (!groups[pkg.category]) groups[pkg.category] = [];
+      groups[pkg.category].push(pkg);
+    });
+
+    // Build HTML
+    let html = "";
+    for (const [category, packages] of Object.entries(groups)) {
+      const emoji = CATEGORY_EMOJI[category] || "";
+      html += `
+        <div class="package-category-group" data-group-category="${category}">
+          <div class="package-category-heading">${emoji} ${category}</div>
+          <div class="package-cards-row">
+            ${packages.map(pkg => `
+              <div class="package-card"
+                   data-pkg-id="${pkg.packageId}"
+                   data-pkg-name="${pkg.category} Bundle — ${pkg.sizeKg} kg"
+                   data-pkg-category="${pkg.category}"
+                   data-pkg-size="${pkg.sizeKg}">
+                <div class="package-card-header">
+                  <div class="package-name">${pkg.category} Bundle</div>
+                  <span class="package-size-badge">${pkg.sizeKg} kg</span>
+                </div>
+                <button class="package-toggle-desc" onclick="toggleDesc(this)">What's inside ▾</button>
+                <div class="package-desc">
+                  <ul>
+                    ${pkg.contents.map(c => `<li>${c.qty} ${c.unit} ${c.item}</li>`).join("")}
+                  </ul>
+                </div>
+                <button class="package-add-btn ${!pkg.canFulfil ? 'unavailable' : ''}"
+                        onclick="addPackageToCart(this)"
+                        ${!pkg.canFulfil ? 'disabled title="Not enough stock"' : ""}>
+                  ${pkg.canFulfil ? "Add to Cart" : "Out of Stock"}
+                </button>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    container.innerHTML = html;
+
+  } catch (err) {
+    console.warn("Supply Network unavailable, using fallback bundles:", err);
+    renderFallbackPackages(container);
+  }
+}
+
+// ── Fallback bundles (used when API is unreachable) ──────────────────────────
+function renderFallbackPackages(container) {
+  const fallback = [
+    { category: "Dairy",   sizeKg: 5,  packageId: "dairy-5",
+      contents: [{qty:2,unit:"kg",item:"Whole Milk"},{qty:1,unit:"kg",item:"Cheddar Cheese"},{qty:1,unit:"kg",item:"Plain Yogurt"},{qty:.5,unit:"kg",item:"Butter"},{qty:.5,unit:"kg",item:"Cream Cheese"}] },
+    { category: "Dairy",   sizeKg: 10, packageId: "dairy-10",
+      contents: [{qty:3,unit:"kg",item:"Whole Milk"},{qty:2,unit:"kg",item:"Cheddar Cheese"},{qty:2,unit:"kg",item:"Plain Yogurt"},{qty:1.5,unit:"kg",item:"Butter"},{qty:1,unit:"kg",item:"Cream Cheese"},{qty:.5,unit:"kg",item:"Sour Cream"}] },
+    { category: "Dairy",   sizeKg: 20, packageId: "dairy-20",
+      contents: [{qty:6,unit:"kg",item:"Whole Milk"},{qty:4,unit:"kg",item:"Cheddar Cheese"},{qty:4,unit:"kg",item:"Plain Yogurt"},{qty:3,unit:"kg",item:"Butter"},{qty:2,unit:"kg",item:"Cream Cheese"},{qty:1,unit:"kg",item:"Sour Cream"}] },
+    { category: "Meat",    sizeKg: 5,  packageId: "meat-5",
+      contents: [{qty:2,unit:"kg",item:"Ground Beef"},{qty:1.5,unit:"kg",item:"Chicken Breast"},{qty:1,unit:"kg",item:"Pork Chops"},{qty:.5,unit:"kg",item:"Beef Sausages"}] },
+    { category: "Meat",    sizeKg: 10, packageId: "meat-10",
+      contents: [{qty:3,unit:"kg",item:"Ground Beef"},{qty:2.5,unit:"kg",item:"Chicken Breast"},{qty:2,unit:"kg",item:"Pork Chops"},{qty:1.5,unit:"kg",item:"Beef Sausages"},{qty:1,unit:"kg",item:"Lamb Shoulder"}] },
+    { category: "Meat",    sizeKg: 20, packageId: "meat-20",
+      contents: [{qty:6,unit:"kg",item:"Ground Beef"},{qty:5,unit:"kg",item:"Chicken Breast"},{qty:4,unit:"kg",item:"Pork Chops"},{qty:3,unit:"kg",item:"Beef Sausages"},{qty:2,unit:"kg",item:"Lamb Shoulder"}] },
+    { category: "Produce", sizeKg: 5,  packageId: "produce-5",
+      contents: [{qty:1,unit:"kg",item:"Tomatoes"},{qty:1,unit:"kg",item:"Carrots"},{qty:1,unit:"kg",item:"Potatoes"},{qty:.5,unit:"kg",item:"Spinach"},{qty:.5,unit:"kg",item:"Broccoli"},{qty:.5,unit:"kg",item:"Apples"}] },
+    { category: "Produce", sizeKg: 10, packageId: "produce-10",
+      contents: [{qty:2,unit:"kg",item:"Tomatoes"},{qty:2,unit:"kg",item:"Carrots"},{qty:2,unit:"kg",item:"Potatoes"},{qty:1,unit:"kg",item:"Spinach"},{qty:1,unit:"kg",item:"Broccoli"},{qty:1,unit:"kg",item:"Apples"},{qty:1,unit:"kg",item:"Onions"}] },
+    { category: "Produce", sizeKg: 20, packageId: "produce-20",
+      contents: [{qty:4,unit:"kg",item:"Tomatoes"},{qty:4,unit:"kg",item:"Carrots"},{qty:4,unit:"kg",item:"Potatoes"},{qty:2,unit:"kg",item:"Spinach"},{qty:2,unit:"kg",item:"Broccoli"},{qty:2,unit:"kg",item:"Apples"},{qty:2,unit:"kg",item:"Onions"}] },
+  ];
+  // Reuse the same rendering logic by faking canFulfil: true
+  const fakeData = { packages: fallback.map(p => ({ ...p, canFulfil: true })) };
+  const fakeResp = { json: async () => fakeData, ok: true };
+  // Just build the HTML directly
+  const groups = {};
+  fallback.forEach(pkg => {
+    if (!groups[pkg.category]) groups[pkg.category] = [];
+    groups[pkg.category].push({ ...pkg, canFulfil: true });
+  });
+  let html = "";
+  for (const [category, packages] of Object.entries(groups)) {
+    const emoji = CATEGORY_EMOJI[category] || "";
+    html += `
+      <div class="package-category-group" data-group-category="${category}">
+        <div class="package-category-heading">${emoji} ${category}</div>
+        <div class="package-cards-row">
+          ${packages.map(pkg => `
+            <div class="package-card"
+                 data-pkg-id="${pkg.packageId}"
+                 data-pkg-name="${pkg.category} Bundle — ${pkg.sizeKg} kg"
+                 data-pkg-category="${pkg.category}"
+                 data-pkg-size="${pkg.sizeKg}">
+              <div class="package-card-header">
+                <div class="package-name">${pkg.category} Bundle</div>
+                <span class="package-size-badge">${pkg.sizeKg} kg</span>
+              </div>
+              <button class="package-toggle-desc" onclick="toggleDesc(this)">What's inside ▾</button>
+              <div class="package-desc">
+                <ul>${pkg.contents.map(c => `<li>${c.qty} ${c.unit} ${c.item}</li>`).join("")}</ul>
+              </div>
+              <button class="package-add-btn" onclick="addPackageToCart(this)">Add to Cart</button>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+  container.innerHTML = html;
+}
+
+
 
 function toggleDesc(btn) {
   const desc = btn.nextElementSibling;
@@ -70,6 +200,9 @@ function closeCart() {
 
 // Wire up the cart icon in the header (loaded dynamically by components.js)
 document.addEventListener("DOMContentLoaded", () => {
+  // Load bundles from Supply Network API
+  loadPackages();
+
   // Retry a few times since header loads asynchronously
   let attempts = 0;
   const interval = setInterval(() => {
@@ -99,8 +232,7 @@ function filterCategory(category, linkEl) {
 
   // Filter package category groups
   document.querySelectorAll(".package-category-group").forEach(group => {
-    const match = category === "all" ||
-      group.querySelector(".package-card").dataset.pkgCategory === category;
+    const match = category === "all" || group.dataset.groupCategory === category;
     group.style.display = match ? "" : "none";
   });
 
