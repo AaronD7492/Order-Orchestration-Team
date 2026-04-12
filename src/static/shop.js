@@ -1,3 +1,59 @@
+// ── Prepackaged bundle helpers ──────────────────────────────────────────────
+
+function toggleDesc(btn) {
+  const desc = btn.nextElementSibling;
+  const open = desc.classList.toggle("open");
+  btn.textContent = open ? "What's inside ▴" : "What's inside ▾";
+}
+
+function addPackageToCart(btn) {
+  const card = btn.closest(".package-card");
+  const pkgId       = card.dataset.pkgId;
+  const pkgName     = card.dataset.pkgName;
+  const pkgCategory = card.dataset.pkgCategory;
+  const pkgSize     = parseInt(card.dataset.pkgSize, 10);
+
+  // Packages use a synthetic productId so order orchestration can route them
+  const existing = cart.find(i => i.productId === pkgId);
+  if (existing) {
+    existing.quantity += 1;
+  } else {
+    cart.push({
+      productId:   pkgId,
+      productName: pkgName,
+      quantity:    1,
+      unit:        "package",
+      category:    pkgCategory,
+      isPackage:   true,
+      packageSize: pkgSize,
+    });
+  }
+
+  // Visual feedback on button
+  btn.textContent = "✓ Added";
+  btn.classList.add("added");
+  setTimeout(() => {
+    btn.textContent = "Add to Cart";
+    btn.classList.remove("added");
+  }, 1800);
+
+  renderCart();
+  showToast(`${pkgName} added to cart`, "success");
+  openCart();
+}
+
+// ── Toast notification ──────────────────────────────────────────────────────
+function showToast(message, type = "") {
+  const toast = document.getElementById("orderToast");
+  toast.textContent = message;
+  toast.className = "order-toast" + (type ? " " + type : "");
+  // Force reflow so transition plays
+  void toast.offsetWidth;
+  toast.classList.add("show");
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => toast.classList.remove("show"), 2800);
+}
+
 // ── Cart state ──────────────────────────────────────────────────────────────
 let cart = [];
 
@@ -105,7 +161,7 @@ function renderCart() {
     <div class="cart-item">
       <div class="cart-item-info">
         <div class="cart-item-name">${item.productName}</div>
-        <div class="cart-item-qty">${item.quantity} ${item.unit}</div>
+        <div class="cart-item-qty">${item.isPackage ? `${item.quantity} × ${item.packageSize} kg package` : `${item.quantity} ${item.unit}`}</div>
       </div>
       <button class="cart-item-remove" onclick="removeFromCart('${item.productId}')" title="Remove">✕</button>
     </div>

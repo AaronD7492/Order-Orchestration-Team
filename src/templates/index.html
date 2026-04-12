@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Farm2Fork — Shop</title>
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="../static/styles.css" />
   <style>
     /* ── Cart panel ─────────────────────────────────── */
     .cart-panel {
@@ -184,6 +184,165 @@
 
     .product-section { display: none; }
     .product-section.active { display: block; }
+
+    /* ── Prepackaged bundles ─────────────────────────────── */
+    .packages-section {
+      margin-bottom: 2rem;
+    }
+    .packages-section-title {
+      font-family: Arial, sans-serif;
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: bold;
+      margin-bottom: 1rem;
+    }
+    .package-category-group {
+      margin-bottom: 1.6rem;
+    }
+    .package-category-heading {
+      font-family: Arial, sans-serif;
+      font-size: 0.82rem;
+      font-weight: bold;
+      color: var(--green-dark);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 0.7rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .package-category-heading::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .package-cards-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+    .package-card {
+      background: #fff;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.1rem 0.9rem;
+      cursor: pointer;
+      transition: box-shadow 0.15s, transform 0.15s, border-color 0.15s;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .package-card:hover {
+      box-shadow: 0 4px 18px rgba(45,106,45,0.13);
+      transform: translateY(-2px);
+      border-color: var(--green);
+    }
+    .package-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .package-size-badge {
+      background: var(--green);
+      color: #fff;
+      font-family: Arial, sans-serif;
+      font-size: 0.78rem;
+      font-weight: bold;
+      padding: 3px 9px;
+      border-radius: 12px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .package-name {
+      font-size: 0.9rem;
+      font-weight: bold;
+      color: var(--text);
+      line-height: 1.3;
+    }
+    .package-toggle-desc {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-family: Arial, sans-serif;
+      padding: 0;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      text-align: left;
+      transition: color 0.12s;
+    }
+    .package-toggle-desc:hover { color: var(--green-dark); }
+    .package-desc {
+      display: none;
+      background: var(--green-light);
+      border-radius: 5px;
+      padding: 0.6rem 0.75rem;
+      font-family: Arial, sans-serif;
+      font-size: 0.78rem;
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .package-desc.open { display: block; }
+    .package-desc ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .package-desc ul li::before {
+      content: "✓ ";
+      color: var(--green-dark);
+      font-weight: bold;
+    }
+    .package-add-btn {
+      width: 100%;
+      padding: 0.5rem;
+      background: var(--green);
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      font-family: Arial, sans-serif;
+      font-size: 0.82rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.15s;
+      margin-top: auto;
+    }
+    .package-add-btn:hover { background: var(--green-dark); }
+    .package-add-btn.added {
+      background: #16a34a;
+      pointer-events: none;
+    }
+
+    /* ── Order status toast ──────────────────────────────── */
+    .order-toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--green-dark);
+      color: #fff;
+      font-family: Arial, sans-serif;
+      font-size: 0.88rem;
+      padding: 0.75rem 1.4rem;
+      border-radius: 6px;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.2);
+      z-index: 500;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      opacity: 0;
+      white-space: nowrap;
+    }
+    .order-toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+    .order-toast.success { background: #16a34a; }
+    .order-toast.error   { background: #dc2626; }
   </style>
 </head>
 <body>
@@ -234,6 +393,207 @@
 
     <!-- Main content -->
     <main class="main-content">
+
+      <!-- ── Prepackaged Bundles ──────────────────────────── -->
+      <div class="packages-section">
+        <div class="packages-section-title">🛒 Prepackaged Bundles — Pick a size, add to cart</div>
+
+        <!-- Dairy -->
+        <div class="package-category-group">
+          <div class="package-category-heading">🥛 Dairy</div>
+          <div class="package-cards-row">
+
+            <div class="package-card" data-pkg-id="dairy-5" data-pkg-name="Dairy Bundle — 5 kg" data-pkg-category="Dairy" data-pkg-size="5">
+              <div class="package-card-header">
+                <div class="package-name">Dairy Bundle</div>
+                <span class="package-size-badge">5 kg</span>
+              </div>
+              <button class="package-toggle-desc" onclick="toggleDesc(this)">What's inside ▾</button>
+              <div class="package-desc">
+                <ul>
+                  <li>2 kg whole milk</li>
+                  <li>1 kg cheddar cheese</li>
+                  <li>1 kg plain yogurt</li>
+                  <li>500 g butter</li>
+                  <li>500 g cream cheese</li>
+                </ul>
+              </div>
+              <button class="package-add-btn" onclick="addPackageToCart(this)">Add to Cart</button>
+            </div>
+
+            <div class="package-card" data-pkg-id="dairy-10" data-pkg-name="Dairy Bundle — 10 kg" data-pkg-category="Dairy" data-pkg-size="10">
+              <div class="package-card-header">
+                <div class="package-name">Dairy Bundle</div>
+                <span class="package-size-badge">10 kg</span>
+              </div>
+              <button class="package-toggle-desc" onclick="toggleDesc(this)">What's inside ▾</button>
+              <div class="package-desc">
+                <ul>
+                  <li>3 kg whole milk</li>
+                  <li>2 kg cheddar cheese</li>
+                  <li>2 kg plain yogurt</li>
+                  <li>1.5 kg butter</li>
+                  <li>1 kg cream cheese</li>
+                  <li>500 g sour cream</li>
+                </ul>
+              </div>
+              <button class="package-add-btn" onclick="addPackageToCart(this)">Add to Cart</button>
+            </div>
+
+            <div class="package-card" data-pkg-id="dairy-20" data-pkg-name="Dairy Bundle — 20 kg" data-pkg-category="Dairy" data-pkg-size="20">
+              <div class="package-card-header">
+                <div class="package-name">Dairy Bundle</div>
+                <span class="package-size-badge">20 kg</span>
+              </div>
+              <button class="package-toggle-desc" onclick="toggleDesc(this)">What's inside ▾</button>
+              <div class="package-desc">
+                <ul>
+                  <li>6 kg whole milk</li>
+                  <li>4 kg cheddar cheese</li>
+                  <li>4 kg plain yogurt</li>
+                  <li>3 kg butter</li>
+                  <li>2 kg cream cheese</li>
+                  <li>1 kg sour cream</li>
+                </ul>
+              </div>
+              <button class="package-add-btn" onclick="addPackageToCart(this)">Add to Cart</button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Meat -->
+        <div class="package-category-group">
+          <div class="package-category-heading">🥩 Meat</div>
+          <div class="package-cards-row">
+
+            <div class="package-card" data-pkg-id="meat-5" data-pkg-name="Meat Bundle — 5 kg" data-pkg-category="Meat" data-pkg-size="5">
+              <div class="package-card-header">
+                <div class="package-name">Meat Bundle</div>
+                <span class="package-size-badge">5 kg</span>
+              </div>
+              <button class="package-toggle-desc" onclick="toggleDesc(this)">What's inside ▾</button>
+              <div class="package-desc">
+                <ul>
+                  <li>2 kg ground beef</li>
+                  <li>1.5 kg chicken breast</li>
+                  <li>1 kg pork chops</li>
+                  <li>500 g beef sausages</li>
+                </ul>
+              </div>
+              <button class="package-add-btn" onclick="addPackageToCart(this)">Add to Cart</button>
+            </div>
+
+            <div class="package-card" data-pkg-id="meat-10" data-pkg-name="Meat Bundle — 10 kg" data-pkg-category="Meat" data-pkg-size="10">
+              <div class="package-card-header">
+                <div class="package-name">Meat Bundle</div>
+                <span class="package-size-badge">10 kg</span>
+              </div>
+              <button class="package-toggle-desc" onclick="toggleDesc(this)">What's inside ▾</button>
+              <div class="package-desc">
+                <ul>
+                  <li>3 kg ground beef</li>
+                  <li>2.5 kg chicken breast</li>
+                  <li>2 kg pork chops</li>
+                  <li>1.5 kg beef sausages</li>
+                  <li>1 kg lamb shoulder</li>
+                </ul>
+              </div>
+              <button class="package-add-btn" onclick="addPackageToCart(this)">Add to Cart</button>
+            </div>
+
+            <div class="package-card" data-pkg-id="meat-20" data-pkg-name="Meat Bundle — 20 kg" data-pkg-category="Meat" data-pkg-size="20">
+              <div class="package-card-header">
+                <div class="package-name">Meat Bundle</div>
+                <span class="package-size-badge">20 kg</span>
+              </div>
+              <button class="package-toggle-desc" onclick="toggleDesc(this)">What's inside ▾</button>
+              <div class="package-desc">
+                <ul>
+                  <li>6 kg ground beef</li>
+                  <li>5 kg chicken breast</li>
+                  <li>4 kg pork chops</li>
+                  <li>3 kg beef sausages</li>
+                  <li>2 kg lamb shoulder</li>
+                </ul>
+              </div>
+              <button class="package-add-btn" onclick="addPackageToCart(this)">Add to Cart</button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Produce -->
+        <div class="package-category-group">
+          <div class="package-category-heading">🥦 Produce</div>
+          <div class="package-cards-row">
+
+            <div class="package-card" data-pkg-id="produce-5" data-pkg-name="Produce Bundle — 5 kg" data-pkg-category="Produce" data-pkg-size="5">
+              <div class="package-card-header">
+                <div class="package-name">Produce Bundle</div>
+                <span class="package-size-badge">5 kg</span>
+              </div>
+              <button class="package-toggle-desc" onclick="toggleDesc(this)">What's inside ▾</button>
+              <div class="package-desc">
+                <ul>
+                  <li>1 kg tomatoes</li>
+                  <li>1 kg carrots</li>
+                  <li>1 kg potatoes</li>
+                  <li>500 g spinach</li>
+                  <li>500 g broccoli</li>
+                  <li>500 g apples</li>
+                </ul>
+              </div>
+              <button class="package-add-btn" onclick="addPackageToCart(this)">Add to Cart</button>
+            </div>
+
+            <div class="package-card" data-pkg-id="produce-10" data-pkg-name="Produce Bundle — 10 kg" data-pkg-category="Produce" data-pkg-size="10">
+              <div class="package-card-header">
+                <div class="package-name">Produce Bundle</div>
+                <span class="package-size-badge">10 kg</span>
+              </div>
+              <button class="package-toggle-desc" onclick="toggleDesc(this)">What's inside ▾</button>
+              <div class="package-desc">
+                <ul>
+                  <li>2 kg tomatoes</li>
+                  <li>2 kg carrots</li>
+                  <li>2 kg potatoes</li>
+                  <li>1 kg spinach</li>
+                  <li>1 kg broccoli</li>
+                  <li>1 kg apples</li>
+                  <li>1 kg onions</li>
+                </ul>
+              </div>
+              <button class="package-add-btn" onclick="addPackageToCart(this)">Add to Cart</button>
+            </div>
+
+            <div class="package-card" data-pkg-id="produce-20" data-pkg-name="Produce Bundle — 20 kg" data-pkg-category="Produce" data-pkg-size="20">
+              <div class="package-card-header">
+                <div class="package-name">Produce Bundle</div>
+                <span class="package-size-badge">20 kg</span>
+              </div>
+              <button class="package-toggle-desc" onclick="toggleDesc(this)">What's inside ▾</button>
+              <div class="package-desc">
+                <ul>
+                  <li>4 kg tomatoes</li>
+                  <li>4 kg carrots</li>
+                  <li>4 kg potatoes</li>
+                  <li>2 kg spinach</li>
+                  <li>2 kg broccoli</li>
+                  <li>2 kg apples</li>
+                  <li>2 kg onions</li>
+                </ul>
+              </div>
+              <button class="package-add-btn" onclick="addPackageToCart(this)">Add to Cart</button>
+            </div>
+
+          </div>
+        </div>
+
+      </div><!-- /packages-section -->
+
+      <hr style="border:none;border-top:1px solid var(--border);margin-bottom:1.6rem;">
+
       <!-- Source tabs -->
       <div class="section-tabs">
         <button class="tab-btn active" onclick="switchTab('warehouse', this)">Warehouse Stock</button>
@@ -310,6 +670,7 @@
   </div>
 
   <div id="footer-placeholder"></div>
+  <div class="order-toast" id="orderToast"></div>
 
   <script src="/static/components.js"></script>
   <script src="/static/shop.js"></script>
