@@ -50,8 +50,7 @@ def create_app():
         cis_items = []
         try:
             cis_resp = requests.get(
-                f"{Config.CIS_BASE_URL}/api/v1/inventory/pooled",
-                headers={"X-API-Key": Config.CIS_API_KEY},
+                f"{Config.SUPPLY_BASE_URL}/api/inventory",
                 timeout=8,
             )
             cis_resp.raise_for_status()

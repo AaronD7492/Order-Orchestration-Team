@@ -34,7 +34,7 @@ def get_vendors():
         availableManifest: [{productId, productName, hierarchy, unit, quantityAvailable}]
       }]
     """
-    url = f"{Config.AGNET_BASE_URL}/vendors"
+    url = f"{Config.AGNET_BASE_URL}/api/v1/vendors"
     try:
         resp = requests.get(url, headers=_HEADERS, timeout=10)
         resp.raise_for_status()
