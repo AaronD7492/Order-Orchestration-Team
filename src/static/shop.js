@@ -63,6 +63,8 @@ async function loadPackages() {
   } catch (err) {
     console.warn("Supply Network unavailable, showing bundles as out of stock:", err);
     renderFallbackPackages(container);
+    // Retry every 30 seconds until the API comes back
+    setTimeout(loadPackages, 30000);
   }
 }
 
