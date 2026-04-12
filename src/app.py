@@ -50,7 +50,7 @@ def create_app():
         cis_items = []
         try:
             cis_resp = requests.get(
-                f"{Config.CIS_BASE_URL}/inventory/pooled",
+                f"{Config.CIS_BASE_URL}/api/v1/inventory/pooled",
                 headers={"X-API-Key": Config.CIS_API_KEY},
                 timeout=8,
             )
@@ -77,7 +77,7 @@ def create_app():
         """Proxy to CIS pooled inventory — used by JS if it needs fresh data."""
         try:
             resp = requests.get(
-                f"{Config.CIS_BASE_URL}/inventory/pooled",
+                f"{Config.CIS_BASE_URL}/api/v1/inventory/pooled",
                 headers={"X-API-Key": Config.CIS_API_KEY},
                 timeout=8,
             )

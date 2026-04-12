@@ -1,6 +1,6 @@
 // ── Supply Network config ────────────────────────────────────────────────────
 // Change this one line when deploying to the live server
-const SUPPLY_API_URL = "http://165.22.230.110:5002";
+const SUPPLY_API_URL = "http://localhost:5002";
 
 // ── Category emoji map ───────────────────────────────────────────────────────
 const CATEGORY_EMOJI = { Dairy: "🥛", Meat: "🥩", Produce: "🥦" };
@@ -61,7 +61,7 @@ async function loadPackages() {
     container.innerHTML = html;
 
   } catch (err) {
-    console.warn("Supply Network unavailable, using fallback bundles:", err);
+    console.warn("Supply Network unavailable, showing bundles as out of stock:", err);
     renderFallbackPackages(container);
   }
 }
@@ -88,14 +88,11 @@ function renderFallbackPackages(container) {
     { category: "Produce", sizeKg: 20, packageId: "produce-20",
       contents: [{qty:4,unit:"kg",item:"Tomatoes"},{qty:4,unit:"kg",item:"Carrots"},{qty:4,unit:"kg",item:"Potatoes"},{qty:2,unit:"kg",item:"Spinach"},{qty:2,unit:"kg",item:"Broccoli"},{qty:2,unit:"kg",item:"Apples"},{qty:2,unit:"kg",item:"Onions"}] },
   ];
-  // Reuse the same rendering logic by faking canFulfil: true
-  const fakeData = { packages: fallback.map(p => ({ ...p, canFulfil: true })) };
-  const fakeResp = { json: async () => fakeData, ok: true };
-  // Just build the HTML directly
+  // API unreachable — show all bundles as out of stock
   const groups = {};
   fallback.forEach(pkg => {
     if (!groups[pkg.category]) groups[pkg.category] = [];
-    groups[pkg.category].push({ ...pkg, canFulfil: true });
+    groups[pkg.category].push({ ...pkg, canFulfil: false });
   });
   let html = "";
   for (const [category, packages] of Object.entries(groups)) {
@@ -118,7 +115,9 @@ function renderFallbackPackages(container) {
               <div class="package-desc">
                 <ul>${pkg.contents.map(c => `<li>${c.qty} ${c.unit} ${c.item}</li>`).join("")}</ul>
               </div>
-              <button class="package-add-btn" onclick="addPackageToCart(this)">Add to Cart</button>
+              <button class="package-add-btn unavailable" disabled title="Supply network unavailable">
+                Out of Stock
+              </button>
             </div>
           `).join("")}
         </div>
