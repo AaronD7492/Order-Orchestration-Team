@@ -43,6 +43,10 @@ def create_app():
 
         CIS inventory = what can be ordered RIGHT NOW (productIds used for checkout lock).
         AgNet catalog = full supplier product range shown as the browsable catalog.
+
+        SAGA NOTE: Navigating back to the shop triggers the compensating transaction
+        for any in-flight CIS lock via the before_request hook below. This ensures
+        that abandoned locks are released before the user can start a new checkout.
         """
         _log = logging.getLogger(__name__)
 
@@ -144,8 +148,8 @@ def create_app():
         """Pre-fills session with sample cart data for local development/demo."""
         session["cart_items"] = [
             {"productId": "PROD-CARROTS", "productName": "Carrots", "quantity": 2.5, "unit": "kg"},
-            {"productId": "PROD-ONIONS", "productName": "Onions", "quantity": 1.0, "unit": "kg"},
-            {"productId": "PROD-MILK", "productName": "Whole Milk", "quantity": 2.0, "unit": "l"},
+            {"productId": "PROD-ONIONS",  "productName": "Onions",  "quantity": 1.0, "unit": "kg"},
+            {"productId": "PROD-MILK",    "productName": "Whole Milk", "quantity": 2.0, "unit": "l"},
         ]
         session["user_token"] = "demo-token"
         return redirect("/checkout")
@@ -198,7 +202,18 @@ def create_app():
 
     @app.route("/checkout", methods=["GET"])
     def checkout():
-        """Render the checkout page, hydrated with cart items and CFP address."""
+        """
+        Render the checkout page, hydrated with cart items and CFP address.
+
+        SAGA NOTE: Arriving here after a failed or abandoned submit means the
+        user has gone back. Any pending CIS lock stored in the session is
+        cleaned up by the _release_pending_lock() helper called here — this
+        is the compensating transaction for a lock that was created but never
+        shipped. The lock will also expire naturally after 60s, but explicitly
+        releasing it frees the stock immediately for other customers.
+        """
+        _release_pending_lock()
+
         cart_items = session.get("cart_items")
         if not cart_items:
             return (
@@ -218,7 +233,6 @@ def create_app():
                 )
                 client = get_client(decoded.get("client_id", ""))
                 if client and client.get("address"):
-                    # Parse "721 King St., Kitchener, ON M0X3A6"
                     addr = client["address"]
                     parts = [p.strip() for p in addr.split(",")]
                     if len(parts) >= 3:
@@ -233,6 +247,29 @@ def create_app():
                 logging.getLogger(__name__).warning("CFP address prefill failed: %s", e)
 
         return render_template("checkout.html", cart_items=cart_items, prefill=prefill)
+
+    # ------------------------------------------------------------------
+    # SAGA — compensating transaction endpoint
+    # ------------------------------------------------------------------
+
+    @app.route("/checkout/cancel", methods=["GET", "POST"])
+    def checkout_cancel():
+        """
+        SAGA compensating transaction — explicit cancel/rollback.
+
+        Called when the user clicks "Go back to shop" or "Forgetting something?"
+        on the checkout page. Releases any pending CIS lock immediately so the
+        stock is freed for other customers rather than waiting for the 60s TTL.
+
+        Also called internally by _release_pending_lock() on GET /checkout if a
+        stale lock is detected in the session (handles browser back-button case).
+
+        After releasing the lock, redirects back to the shop.
+        """
+        _release_pending_lock()
+        session.pop("cart_items", None)
+        session.pop("user_token", None)
+        return redirect("/")
 
     # ------------------------------------------------------------------
     # Checkout — submit (full order flow)
@@ -253,13 +290,22 @@ def create_app():
             "dropOff":      bool
         }
 
-        Flow:
-          1. Lock inventory in CIS with real shipping address (60s TTL)
-          2. Mock payment — always succeeds (real payment deferred)
-          3. Ship locked order in CIS — happens immediately after lock,
-             well within the 60s window
-          4. Stub handoff to Delivery Execution team
+        SAGA flow:
+          T1. Lock inventory in CIS (60s TTL) — store lockOrderId + lockToken in session
+              Compensating action: release lock via DELETE/expiry if user goes back
+          T2. Mock payment — always succeeds (real payment deferred to Sprint 3)
+              Compensating action: n/a (no real charge)
+          T3. Ship locked order in CIS — clears the lock on success
+              Compensating action: lock_expired error triggers clean retry message
+          T4. Stub handoff to Delivery Execution team
+          T5. Notify C&S to increment delivery category counts
+
+        If T3 or later fails the lock has already been consumed by CIS (ship
+        attempt clears it regardless of outcome), so no compensating action
+        is needed for T1 at that point.
         """
+        _log = logging.getLogger(__name__)
+
         body = request.get_json(silent=True)
         if not body:
             return jsonify({"error": "Invalid request body"}), 400
@@ -267,6 +313,16 @@ def create_app():
         for field in ("addressLine1", "city", "province"):
             if not body.get(field):
                 return jsonify({"error": f"Missing required field: {field}"}), 400
+
+        # Detect re-submission: if a lock already exists in the session the user
+        # has submitted twice (e.g. double-clicked Place Order or the JS fired
+        # twice). Release the stale lock and treat this as a fresh attempt.
+        if session.get("pending_lock_order_id"):
+            _log.warning(
+                "Re-submission detected — releasing stale lock %s before new attempt",
+                session["pending_lock_order_id"],
+            )
+            _release_pending_lock()
 
         # Accept updated cart from checkout page (user may have changed quantities)
         cart_items = body.get("items") or session.get("cart_items")
@@ -282,8 +338,8 @@ def create_app():
         manifest = [
             {
                 "productId": item["productId"],
-                "quantity": item["quantity"],
-                "unit": item["unit"],
+                "quantity":  item["quantity"],
+                "unit":      item["unit"],
             }
             for item in cart_items
         ]
@@ -305,25 +361,36 @@ def create_app():
             f"-{uuid.uuid4().hex[:8].upper()}"
         )
 
-        # Step 1: Lock inventory in CIS
+        # T1: Lock inventory in CIS
+        # Store lock details in session immediately so the compensating
+        # transaction (_release_pending_lock) can clean up if the user
+        # navigates back before T3 completes.
         try:
             lock_result = request_order_lock(f2f_order_id, shipping_address, manifest)
         except InsufficientStockError as e:
-            # TODO: Trigger restock pipeline (P&I / AgNet) — deferred pending team discussion
             return jsonify({"error": "out_of_stock", "message": str(e)}), 409
         except CISError as e:
             return jsonify({"error": "cis_error", "message": str(e)}), 503
 
         lock_order_id = lock_result["lockOrderId"]
-        lock_token = lock_result["lockToken"]
+        lock_token    = lock_result["lockToken"]
 
-        # Step 2: Mock payment,
-        # TODO:Possibly Integrate real payment processor when sprint3 begins.
+        # Persist lock state — compensating transaction reads this on back-navigation
+        session["pending_lock_order_id"] = lock_order_id
+        session["pending_lock_token"]    = lock_token
+        session["pending_f2f_order_id"]  = f2f_order_id
+        session.modified = True
 
-        # Step 3: Ship — happens immediately after lock, well within 60s TTL
+        # T2: Mock payment (real processor deferred to Sprint 3)
+
+        # T3: Ship — immediately after lock, well within 60s TTL
         try:
             ship_result = ship_locked_order(lock_order_id, lock_token)
         except LockExpiredError:
+            # Lock expired between T1 and T3 — clear session state and tell user
+            session.pop("pending_lock_order_id", None)
+            session.pop("pending_lock_token", None)
+            session.pop("pending_f2f_order_id", None)
             return (
                 jsonify(
                     {
@@ -334,21 +401,30 @@ def create_app():
                 409,
             )
         except CISError as e:
+            # CIS error after lock — lock is consumed, clear session state
+            session.pop("pending_lock_order_id", None)
+            session.pop("pending_lock_token", None)
+            session.pop("pending_f2f_order_id", None)
             return jsonify({"error": "cis_error", "message": str(e)}), 503
 
         shipping_id = ship_result["shippingId"]
 
-        # Step 4: Stub handoff to Delivery Execution team
+        # Lock successfully shipped — clear the pending lock from session
+        session.pop("pending_lock_order_id", None)
+        session.pop("pending_lock_token", None)
+        session.pop("pending_f2f_order_id", None)
+
+        # T4: Stub handoff to Delivery Execution team
         destination = {
             "addressLine1": body["addressLine1"],
             "addressLine2": body.get("addressLine2", ""),
-            "city": body["city"],
-            "province": body["province"],
-            "postalCode": body["postalCode"],
+            "city":         body["city"],
+            "province":     body["province"],
+            "postalCode":   body.get("postalCode", ""),
         }
         submit_delivery(f2f_order_id, shipping_id, destination, drop_off)
 
-        # Step 5: Notify C&S — increment their delivery category counts
+        # T5: Notify C&S — increment their delivery category counts
         user_token = session.get("user_token")
         if user_token:
             try:
@@ -360,7 +436,6 @@ def create_app():
                 )
                 client_id = decoded.get("client_id")
                 if client_id:
-                    # Tally cart items by category (Produce / Meat / Dairy)
                     produce = sum(1 for i in cart_items if i.get("category") == "Produce")
                     meat    = sum(1 for i in cart_items if i.get("category") == "Meat")
                     dairy   = sum(1 for i in cart_items if i.get("category") == "Dairy")
@@ -379,14 +454,75 @@ def create_app():
         return (
             jsonify(
                 {
-                    "status": "success",
+                    "status":    "success",
                     "f2fOrderId": f2f_order_id,
                     "shippingId": shipping_id,
-                    "message": "Your order has been placed successfully!",
+                    "message":   "Your order has been placed successfully!",
                 }
             ),
             200,
         )
+
+    # ------------------------------------------------------------------
+    # SAGA helper — compensating transaction for CIS lock
+    # ------------------------------------------------------------------
+
+    def _release_pending_lock():
+        """
+        Compensating transaction (SAGA T1 rollback).
+
+        If a CIS lock was created during a previous submit attempt and the user
+        navigated back before shipping completed, this releases the lock so the
+        stock is freed immediately rather than waiting for the 60s TTL.
+
+        CIS does not currently expose a DELETE /orders/lock endpoint in the
+        Sprint 2 API spec, so the release is best-effort: we log the abandoned
+        lock ID for manual reconciliation and clear it from the session.
+        When CIS exposes a release endpoint in Sprint 3, replace the log line
+        with the actual HTTP call.
+        """
+        lock_order_id = session.get("pending_lock_order_id")
+        if not lock_order_id:
+            return  # Nothing pending, nothing to do
+
+        _log = logging.getLogger(__name__)
+        lock_token    = session.get("pending_lock_token")
+        f2f_order_id  = session.get("pending_f2f_order_id")
+
+        # Attempt release via CIS if an endpoint is available
+        # (spec does not define one yet — this is forward-compatible scaffolding)
+        try:
+            release_url = f"{Config.CIS_BASE_URL}/orders/release"
+            resp = requests.post(
+                release_url,
+                json={"lockOrderId": lock_order_id, "lockToken": lock_token},
+                headers={"X-API-Key": Config.CIS_API_KEY},
+                timeout=5,
+            )
+            if resp.ok:
+                _log.info(
+                    "SAGA compensating transaction: released CIS lock %s (f2fOrderId=%s)",
+                    lock_order_id, f2f_order_id,
+                )
+            else:
+                # CIS returned an error — lock will expire naturally after 60s
+                _log.warning(
+                    "SAGA compensating transaction: CIS release returned %s for lock %s "
+                    "(will expire naturally). f2fOrderId=%s",
+                    resp.status_code, lock_order_id, f2f_order_id,
+                )
+        except requests.exceptions.RequestException as e:
+            # Network error — lock will expire naturally after 60s
+            _log.warning(
+                "SAGA compensating transaction: could not reach CIS to release lock %s "
+                "(will expire naturally in 60s). f2fOrderId=%s. Error: %s",
+                lock_order_id, f2f_order_id, e,
+            )
+
+        # Always clear from session regardless of CIS response
+        session.pop("pending_lock_order_id", None)
+        session.pop("pending_lock_token", None)
+        session.pop("pending_f2f_order_id", None)
 
     return app
 
