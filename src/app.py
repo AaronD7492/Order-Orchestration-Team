@@ -274,8 +274,8 @@ def create_app():
         lock_token = lock_result["lockToken"]
 
         session["pending_lock_order_id"] = lock_order_id
-        session["pending_lock_token"]    = lock_token
-        session["pending_f2f_order_id"]  = f2f_order_id
+        session["pending_lock_token"] = lock_token
+        session["pending_f2f_order_id"] = f2f_order_id
         session.modified = True
 
         # T2: Mock payment (real payment processor deferred to Sprint 3)
@@ -386,7 +386,7 @@ def create_app():
             return
 
         _log = logging.getLogger(__name__)
-        lock_token   = session.get("pending_lock_token")
+        lock_token = session.get("pending_lock_token")
         f2f_order_id = session.get("pending_f2f_order_id")
 
         try:
