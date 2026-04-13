@@ -1,112 +1,65 @@
-import csv
-import logging
-from pathlib import Path
+"""
+CFP client — customer profile data.
 
-import paramiko
+Delegates to the Customer & Subscription (C&S) team's internal API,
+which owns the customer data and CFP sync responsibility.
+OO does not connect to CFP directly — C&S owns that integration.
+
+C&S endpoint used: GET /api/v1/customers
+Returns paginated customer objects with client_id, mobile, produce, meat,
+dairy, delivery_count. Address data is sourced from CFP by the C&S service.
+"""
+
+import logging
+
+import requests
 
 from src.config import Config
 
 logger = logging.getLogger(__name__)
 
-CITIES = ["Cambridge", "Kitchener", "Waterloo"]
 
-
-def _sftp_connect():
-    """Open an SFTP connection to the CFP server. Caller must close it."""
-    transport = paramiko.Transport((Config.CFP_HOST, Config.CFP_PORT))
-    transport.connect(username=Config.CFP_USER, password=Config.CFP_PASSWORD)
-    sftp = paramiko.SFTPClient.from_transport(transport)
-    return sftp, transport
-
-
-def sync_primary_files():
-    """
-    Download all three CFP primary CSV files from the SFTP server to the
-    local cache directory (CFP_CACHE_DIR).
-
-    Called:
-      - On app startup (non-blocking — failure is logged, not raised)
-      - Ad-hoc when a client_id is not found in the local cache (per CFP spec)
-
-    Files pulled:
-      /primary/CFP-Cambridge.csv
-      /primary/CFP-Kitchener.csv
-      /primary/CFP-Waterloo.csv
-    """
-    cache_dir = Path(Config.CFP_CACHE_DIR)
-    cache_dir.mkdir(exist_ok=True)
-
-    sftp, transport = _sftp_connect()
-    try:
-        for city in CITIES:
-            remote = f"/primary/CFP-{city}.csv"
-            local = cache_dir / f"CFP-{city}.csv"
-            sftp.get(remote, str(local))
-            logger.info("CFP sync: pulled %s", remote)
-    finally:
-        sftp.close()
-        transport.close()
-
-
-def load_clients():
-    """
-    Parse all locally cached CFP CSVs into a dict keyed by clientID.
-
-    Returns:
-        {
-            "A123": {
-                "clientID":      "A123",
-                "address":       "123 King St W",
-                "mobile":        "5195550001",
-                "deliveryCount": "4",
-                "produce":       "2",
-                "meat":          "1",
-                "dairy":         "1",
-                "city":          "Waterloo"   # derived from filename
-            },
-            ...
-        }
-
-    Returns an empty dict if no cached files exist yet.
-    """
-    clients = {}
-    cache_dir = Path(Config.CFP_CACHE_DIR)
-
-    for city in CITIES:
-        local = cache_dir / f"CFP-{city}.csv"
-        if not local.exists():
-            continue
-        with open(local, newline="", encoding="utf-8") as f:
-            for row in csv.DictReader(f):
-                clients[row["clientID"]] = {**row, "city": city}
-
-    return clients
+class CFPError(Exception):
+    def __init__(self, message, status_code=500):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def get_client(client_id):
     """
-    Look up a single client by clientID.
+    Fetch a single customer record from the C&S service by client_id.
 
-    First checks the local cache. If not found, triggers an ad-hoc SFTP
-    sync (per CFP spec) and retries once. Returns None if still not found
-    or if the sync fails.
+    The C&S team owns CFP sync and customer data — we call their
+    GET /api/v1/customers endpoint and find the matching record.
 
     Args:
-        client_id: e.g. "A123"
+        client_id: e.g. "S297"
 
     Returns:
-        Client dict (see load_clients) or None
+        Customer dict with at least {"client_id": str, "address": str}
+        or None if the client is not found or the C&S service is unavailable.
     """
-    clients = load_clients()
-    if client_id in clients:
-        return clients[client_id]
-
-    # Per CFP spec: trigger ad-hoc refresh when client not found locally
-    logger.info("CFP: client '%s' not in local cache — triggering sync", client_id)
+    url = f"{Config.CS_BASE_URL}/api/v1/customers"
     try:
-        sync_primary_files()
-    except Exception as e:
-        logger.error("CFP ad-hoc sync failed: %s", e)
+        response = requests.get(url, timeout=8)
+    except requests.exceptions.RequestException as e:
+        logger.warning("C&S GET /customers unreachable: %s", e)
         return None
 
-    return load_clients().get(client_id)
+    if not response.ok:
+        logger.warning("C&S GET /customers returned %s", response.status_code)
+        return None
+
+    try:
+        data = response.json()
+    except Exception as e:
+        logger.warning("C&S GET /customers invalid JSON: %s", e)
+        return None
+
+    items = data.get("data", {}).get("items", [])
+    for customer in items:
+        if customer.get("client_id") == client_id:
+            return customer
+
+    logger.info("CFP: client '%s' not found in C&S customer list", client_id)
+    return None
