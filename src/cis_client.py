@@ -16,69 +16,6 @@ class LockExpiredError(CISError):
     pass
 
 
-def lock_inventory(items):
-    """
-    Call CIS POST /orders/request to lock inventory.
-    items: list of {"product_id": str, "quantity": int}
-    Returns the CIS response JSON on success.
-    Raises InsufficientStockError (409) or CISError on failure.
-    """
-    url = f"{Config.CIS_BASE_URL}/orders/request"
-    try:
-        response = requests.post(url, json={"items": items}, timeout=10)
-    except requests.exceptions.RequestException as e:
-        raise CISError(f"CIS unreachable: {e}", 503)
-
-    if response.status_code == 409:
-        raise InsufficientStockError(
-            response.json().get("message", "Insufficient stock"),
-            409
-        )
-    if not response.ok:
-        raise CISError(
-            response.json().get("message", "CIS error"),
-            response.status_code
-        )
-
-    return response.json()
-
-
-def ship_order(order_id):
-    """
-    Call CIS POST /orders/ship to finalize a locked order.
-    order_id: the lock/order ID returned by lock_inventory.
-    Returns the CIS response JSON on success.
-    Raises LockExpiredError (410) or CISError on failure.
-    """
-    url = f"{Config.CIS_BASE_URL}/orders/ship"
-    try:
-        response = requests.post(url, json={"order_id": order_id}, timeout=10)
-    except requests.exceptions.RequestException as e:
-        raise CISError(f"CIS unreachable: {e}", 503)
-
-    if response.status_code == 410:
-        raise LockExpiredError(
-            response.json().get("message", "Lock expired"),
-            410
-        )
-    if response.status_code == 409:
-        raise InsufficientStockError(
-            response.json().get("message", "Insufficient stock"),
-            409
-        )
-    if not response.ok:
-        raise CISError(
-            response.json().get("message", "CIS error"),
-            response.status_code
-        )
-
-    return response.json()
-
-
-# ---------------------------------------------------------------------------
-# Checkout-flow functions — matched to the real CIS API spec
-# ---------------------------------------------------------------------------
-
 def request_order_lock(f2f_order_id, shipping_address, manifest):
     """
     Call CIS POST /orders/request to soft-lock inventory (60-second TTL).
