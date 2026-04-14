@@ -70,6 +70,10 @@ def create_app():
         session["cart_items"] = items
         session["user_token"] = body.get("userToken")
 
+        # Fallback: allow direct client_id for automated flows (e.g. C&S subscriptions)
+        if not body.get("userToken") and body.get("client_id"):
+            session["client_id"] = body.get("client_id")
+
         return jsonify({"redirect_url": "/checkout"}), 200
 
     # ------------------------------------------------------------------
@@ -322,8 +326,10 @@ def create_app():
 
         # T5: Notify C&S — increment delivery category counts
         user_token = session.get("user_token")
-        if user_token:
+        client_id = session.get("client_id")  # pre-set by subscription flow (no JWT)
+        if user_token or client_id:
             try:
+                if user_token and not client_id:
                 import jwt as pyjwt
                 decoded = pyjwt.decode(
                     user_token,
@@ -331,7 +337,7 @@ def create_app():
                     algorithms=["HS256"],
                 )
                 client_id = decoded.get("client_id")
-                if client_id:
+            if client_id::
                     produce = sum(1 for i in cart_items if i.get("category") == "Produce")
                     meat = sum(1 for i in cart_items if i.get("category") == "Meat")
                     dairy = sum(1 for i in cart_items if i.get("category") == "Dairy")
