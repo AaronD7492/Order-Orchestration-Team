@@ -35,6 +35,7 @@ def get_team_secret():
     finally:
         conn.close()
 
+
 def create_order(customer_id, status="pending"):
     """Insert a new order, returns the new order id"""
     conn = get_db_connection()
@@ -58,6 +59,7 @@ def create_order(customer_id, status="pending"):
         cur.close()
         conn.close()
 
+
 def add_order_item(order_id, product_id, quantity, unit, price):
     """Add a line item to an order"""
     conn = get_db_connection()
@@ -80,6 +82,7 @@ def add_order_item(order_id, product_id, quantity, unit, price):
     finally:
         cur.close()
         conn.close()
+
 
 def update_order_total(order_id):
     """Recalculate and update the total_cost from order_items"""
@@ -106,6 +109,7 @@ def update_order_total(order_id):
         cur.close()
         conn.close()
 
+
 def save_order_history(customer_id, order_id):
     """Record the order in order_history"""
     conn = get_db_connection()
@@ -125,6 +129,7 @@ def save_order_history(customer_id, order_id):
     finally:
         cur.close()
         conn.close()
+
 
 def save_full_order(customer_id, items):
     """
