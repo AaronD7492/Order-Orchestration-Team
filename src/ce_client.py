@@ -5,6 +5,7 @@ from src.config import Config
 logger = logging.getLogger(__name__)
 
 def post_stock_change(cart_items: list) -> dict:
+
     """
     Notify the CE integration team of a stock change after an order is shipped.
     Always posts with status 'pending' — CE team approves/declines on their side.
