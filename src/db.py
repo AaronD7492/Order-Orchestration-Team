@@ -134,9 +134,9 @@ def save_order_history(customer_id, order_id):
 def save_full_order(customer_id, items):
     """
     Save a complete order end-to-end.
-    
+
     items: list of dicts with keys: product_id, quantity, unit, price
-    
+
     Example:
         save_full_order(1, [
             {"product_id": 3, "quantity": 2.0, "unit": "kg", "price": 4.99},
@@ -144,11 +144,11 @@ def save_full_order(customer_id, items):
         ])
     """
     order_id = create_order(customer_id)
-    
+
     for item in items:
         add_order_item(order_id, item["product_id"], item["quantity"], item["unit"], item["price"])
-    
+
     update_order_total(order_id)
     save_order_history(customer_id, order_id)
-    
+
     return order_id
