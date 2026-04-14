@@ -330,12 +330,12 @@ def create_app():
         if user_token or client_id:
             try:
                 if user_token and not client_id:
-                import jwt as pyjwt
-                decoded = pyjwt.decode(
-                    user_token,
-                    Config.CS_JWT_PASS,
-                    algorithms=["HS256"],
-                )
+                    import jwt as pyjwt
+                    decoded = pyjwt.decode(
+                        user_token,
+                        Config.CS_JWT_PASS,
+                        algorithms=["HS256"],
+                    )
                 client_id = decoded.get("client_id")
             if client_id::
                     produce = sum(1 for i in cart_items if i.get("category") == "Produce")
