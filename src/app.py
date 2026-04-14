@@ -314,6 +314,18 @@ def create_app():
         session.pop("pending_lock_token", None)
         session.pop("pending_f2f_order_id", None)
 
+        # Step 3.5: Notify CE integration of stock change
+        try:
+            from src.ce_client import post_stock_change
+            ce_result = post_stock_change(cart_items)
+            logging.getLogger(__name__).info(
+                "CE stock change posted — eventId: %s, status: %s",
+                ce_result.get("data", {}).get("eventId"),
+                ce_result.get("data", {}).get("status"),
+            )
+        except Exception as e:
+            logging.getLogger(__name__).warning("CE stock change failed: %s", e)
+
         # T4: Stub handoff to Delivery Execution team
         destination = {
             "addressLine1": body["addressLine1"],
