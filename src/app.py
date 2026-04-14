@@ -301,17 +301,13 @@ def create_app():
                 400,
             )
 
-        # Try to pre-fill address from CFP using the C&S JWT
+        # Always pre-fill address from CFP using the logged-in client_id
         prefill = {}
-        user_token = session.get("user_token")
-        if user_token:
+        client_id = session.get("client_id")
+        if client_id:
             try:
-                import jwt as pyjwt
                 from src.cfp_client import get_client
-                decoded = pyjwt.decode(
-                    user_token, Config.CS_JWT_PASS, algorithms=["HS256"]
-                )
-                client = get_client(decoded.get("client_id", ""))
+                client = get_client(client_id)
                 if client and client.get("address"):
                     # Parse "721 King St., Kitchener, ON M0X3A6"
                     addr = client["address"]
@@ -485,9 +481,8 @@ def create_app():
             except Exception as e:
                 logging.getLogger(__name__).warning("C&S update-delivery failed: %s", e)
 
-        # Clear checkout session after successful order
+        # Clear cart after successful order — keep user logged in
         session.pop("cart_items", None)
-        session.pop("user_token", None)
 
         return (
             jsonify(
