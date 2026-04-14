@@ -336,8 +336,8 @@ def create_app():
                         Config.CS_JWT_PASS,
                         algorithms=["HS256"],
                     )
-                client_id = decoded.get("client_id")
-            if client_id::
+                    client_id = decoded.get("client_id")
+                if client_id:
                     produce = sum(1 for i in cart_items if i.get("category") == "Produce")
                     meat = sum(1 for i in cart_items if i.get("category") == "Meat")
                     dairy = sum(1 for i in cart_items if i.get("category") == "Dairy")
@@ -356,7 +356,7 @@ def create_app():
 
         session.pop("cart_items", None)
         session.pop("user_token", None)
-
+        session.pop("client_id", None)
         return (
             jsonify(
                 {
