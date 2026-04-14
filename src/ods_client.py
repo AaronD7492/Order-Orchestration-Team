@@ -1,51 +1,80 @@
 import logging
+from datetime import datetime, timezone
+
+import requests
+
+from src.config import Config
 
 logger = logging.getLogger(__name__)
+
+ODS_ORDERS_URL = f"{Config.ODS_BASE_URL}/orders"
+
+
+def _utc_now_iso():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def submit_delivery(f2f_order_id, shipping_id, destination, drop_off):
     """
-    Stub: hand completed order off to the Delivery Execution team.
+    Submit a completed order to ODS (Order Distribution System).
 
-    The Delivery Execution team will consume this data and call
-    POST /api/v1/orders on ODS with the following payload shape:
-
-        {
-            "warehouseOrderNumber": shipping_id,   # CIS shippingId used as WH order number
-            "destination": {
-                "addressLine1": str,
-                "addressLine2": str,               # may be empty
-                "city":         str,               # must be Waterloo | Kitchener | Cambridge
-                "province":     str,               # ON
-                "postalCode":   str
-            },
-            "specialRequirements": {
-                "refrigeration": True,             # assumed True for food orders
-                "dropOff":       bool              # True = leave at door, False = signature
-            },
-            "requestedAtUtc": "<ISO-8601 UTC>"
-        }
-
-    dropOff behaviour (ODS spec):
-        True  — always succeeds at cycle completion
-        False — 80% success rate per attempt; auto-retried until delivered
-
-    TODO: Replace this stub with one of (pending Delivery Execution team discussion):
-        - POST to Delivery Execution service REST API
-        - Shared DB event record consumed by DE service
-        - Message queue / event bus publish
+    Uses the CIS shippingId as the warehouseOrderNumber.
+    All food orders are flagged refrigeration=True.
+    drop_off=True  — leave at door (always succeeds)
+    drop_off=False — signature required (80% success, auto-retried by ODS)
     """
-    logger.info(
-        "STUB — Delivery Execution handoff | f2fOrderId=%s | shippingId=%s | city=%s | dropOff=%s",
-        f2f_order_id,
-        shipping_id,
-        destination.get("city"),
-        drop_off,
-    )
+    payload = {
+        "warehouseOrderNumber": shipping_id,
+        "destination": {
+            "addressLine1": destination["addressLine1"],
+            "city": destination["city"],
+            "province": destination["province"],
+            "postalCode": destination.get("postalCode", ""),
+        },
+        "specialRequirements": {
+            "refrigeration": True,
+            "dropOff": bool(drop_off),
+        },
+        "requestedAtUtc": _utc_now_iso(),
+    }
 
+    if destination.get("addressLine2"):
+        payload["destination"]["addressLine2"] = destination["addressLine2"]
+
+    headers = {
+        "X-API-Key": Config.ODS_API_KEY,
+        "Content-Type": "application/json",
+    }
+
+    try:
+        resp = requests.post(ODS_ORDERS_URL, json=payload, headers=headers, timeout=10)
+    except requests.RequestException as e:
+        logger.error("ODS unreachable | f2fOrderId=%s | error=%s", f2f_order_id, e)
+        return {"status": "ods_unreachable", "f2fOrderId": f2f_order_id, "error": str(e)}
+
+    try:
+        data = resp.json()
+    except Exception:
+        data = {"rawResponse": resp.text}
+
+    if resp.status_code == 202:
+        logger.info(
+            "ODS accepted | f2fOrderId=%s | shippingId=%s | orderId=%s",
+            f2f_order_id,
+            shipping_id,
+            data.get("orderId"),
+        )
+        return {"status": "accepted", "f2fOrderId": f2f_order_id, "odsResponse": data}
+
+    logger.error(
+        "ODS rejected | f2fOrderId=%s | status=%s | body=%s",
+        f2f_order_id,
+        resp.status_code,
+        data,
+    )
     return {
-        "status": "handoff_stubbed",
+        "status": "ods_error",
         "f2fOrderId": f2f_order_id,
-        "shippingId": shipping_id,
-        "note": "Delivery Execution integration pending — see ods_client.py TODO",
+        "odsStatus": resp.status_code,
+        "odsResponse": data,
     }

@@ -16,6 +16,20 @@ class LockExpiredError(CISError):
     pass
 
 
+def _post_with_retry(url, headers, payload, retries=3):
+    """POST to CIS, retrying on 5xx up to `retries` times."""
+    last_exc = None
+    for _ in range(retries):
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=10)
+            if response.status_code < 500:
+                return response
+            last_exc = CISError(f"CIS error {response.status_code}", response.status_code)
+        except requests.exceptions.RequestException as e:
+            last_exc = CISError(f"CIS unreachable: {e}", 503)
+    raise last_exc
+
+
 def lock_inventory(items):
     """
     Call CIS POST /orders/request to lock inventory.
@@ -82,10 +96,7 @@ def ship_order(order_id):
 def request_order_lock(f2f_order_id, shipping_address, manifest):
     """
     Call CIS POST /orders/request to soft-lock inventory (60-second TTL).
-
-    f2f_order_id:     unique F2F order ID, e.g. "F2F-20260328-A1B2C3D4"
-    shipping_address: formatted string, e.g. "123 King St W, Waterloo, ON N2L 3G1"
-    manifest:         list of {"productId": str, "quantity": float, "unit": str}
+    Retries up to 3 times on 5xx responses.
 
     Returns on success:
         {"status": "request-locked", "lockOrderId": ..., "lockToken": ..., "expiresAt": ...}
@@ -100,10 +111,8 @@ def request_order_lock(f2f_order_id, shipping_address, manifest):
         "shippingAddress": shipping_address,
         "manifest": manifest,
     }
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=10)
-    except requests.exceptions.RequestException as e:
-        raise CISError(f"CIS unreachable: {e}", 503)
+
+    response = _post_with_retry(url, headers, payload, retries=5)
 
     try:
         data = response.json()
@@ -126,27 +135,23 @@ def request_order_lock(f2f_order_id, shipping_address, manifest):
 def ship_locked_order(lock_order_id, lock_token):
     """
     Call CIS POST /orders/ship to finalise a previously locked order.
+    Retries up to 3 times on 5xx responses.
 
-    lock_order_id: the lockOrderId returned by request_order_lock
-    lock_token:    the lockToken returned by request_order_lock
+    CIS is occasionally flaky — it can return 500 while the ship actually
+    succeeds server-side.  On retry we detect ALREADY_SHIPPED (409) and
+    treat it as a success, using the lockOrderId as the shippingId fallback.
 
     Returns on success:
         {"status": "ready", "shippingId": ..., "f2fOrderId": ...}
     Raises:
-        LockExpiredError (409 ship-lock-expired) — lock TTL elapsed
-        CISError                                  — any other failure
+        LockExpiredError  — lock TTL elapsed
+        CISError          — any other failure
     """
     url = f"{Config.CIS_BASE_URL}/orders/ship"
     headers = {"X-API-Key": Config.CIS_API_KEY}
-    try:
-        response = requests.post(
-            url,
-            json={"lockOrderId": lock_order_id, "lockToken": lock_token},
-            headers=headers,
-            timeout=10,
-        )
-    except requests.exceptions.RequestException as e:
-        raise CISError(f"CIS unreachable: {e}", 503)
+    payload = {"lockOrderId": lock_order_id, "lockToken": lock_token}
+
+    response = _post_with_retry(url, headers, payload, retries=5)
 
     try:
         data = response.json()
@@ -154,6 +159,10 @@ def ship_locked_order(lock_order_id, lock_token):
         data = {}
 
     if response.status_code == 409:
+        error_code = data.get("error", {}).get("code", "") if isinstance(data.get("error"), dict) else ""
+        # CIS processed the ship but returned 5xx, then ALREADY_SHIPPED on retry — treat as success
+        if error_code == "ALREADY_SHIPPED":
+            return {"status": "ready", "shippingId": lock_order_id, "f2fOrderId": None}
         if data.get("status") == "ship-lock-expired":
             raise LockExpiredError(
                 data.get("message", "Lock expired after 60 seconds"),

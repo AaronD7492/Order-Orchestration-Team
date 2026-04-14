@@ -11,7 +11,7 @@ class Config:
     CIS_BASE_URL = os.getenv("CIS_BASE_URL", "http://138.197.144.135:8201/api/v1")
     CIS_API_KEY = os.getenv("CIS_API_KEY", "")
     ODS_BASE_URL = os.getenv("ODS_BASE_URL", "http://178.128.226.23:8001/api/v1")
-    ODS_API_KEY = os.getenv("ODS_API_KEY", "")
+    ODS_API_KEY = os.getenv("ODS_API_KEY", "kMJIoWBGA_A5xNOLH86NRc2yha_4N8n5u-r_zAmB6BZvDssj")
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-in-prod")
     CFP_HOST = os.getenv("CFP_HOST", "68.183.203.17")
     CFP_PORT = int(os.getenv("CFP_PORT", "22"))
@@ -24,6 +24,7 @@ class Config:
     CS_JWT_PASS = os.getenv("CS_JWT_PASS", "jwtpass123")
     CS_LOGIN_URL = os.getenv("CS_LOGIN_URL", "http://localhost:7500/login")
     F2F_BASE_URL = os.getenv("F2F_BASE_URL", "http://localhost:5001")
+    DE_BASE_URL = os.getenv("DE_BASE_URL", "http://localhost:7600")
 
     # Method-style accessors used by db.py (team convention)
     @classmethod

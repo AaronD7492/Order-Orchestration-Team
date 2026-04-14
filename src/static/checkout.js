@@ -128,6 +128,9 @@ document.addEventListener("DOMContentLoaded", () => {
       if (response.ok && data.status === "success") {
         document.getElementById("success-f2f-id").textContent = data.f2fOrderId || "—";
         document.getElementById("success-shipping-id").textContent = data.shippingId || "—";
+        if (data.deliveryDashboardUrl) {
+          document.getElementById("de-dashboard-link").href = data.deliveryDashboardUrl;
+        }
         successModal.classList.add("active");
       } else {
         const msg = data.message || data.error || "Something went wrong. Please try again.";

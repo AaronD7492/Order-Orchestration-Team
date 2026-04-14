@@ -21,6 +21,10 @@ from src.db import get_customer, get_team_secret
 from src.ods_client import submit_delivery
 
 
+# In-memory delivery store — populated when orders are placed
+_deliveries = []
+
+
 def create_app():
     app = Flask(__name__)
     app.secret_key = Config.SECRET_KEY
@@ -48,16 +52,20 @@ def create_app():
 
         # Fetch CIS pooled inventory (warehouse stock — authoritative for checkout)
         cis_items = []
-        try:
-            cis_resp = requests.get(
-                f"{Config.CIS_BASE_URL}/inventory/pooled",
-                headers={"X-API-Key": Config.CIS_API_KEY},
-                timeout=8,
-            )
-            cis_resp.raise_for_status()
-            cis_items = cis_resp.json().get("items", [])
-        except Exception as e:
-            _log.warning("CIS inventory fetch failed: %s", e)
+        for _attempt in range(3):
+            try:
+                cis_resp = requests.get(
+                    f"{Config.CIS_BASE_URL}/inventory/pooled",
+                    headers={"X-API-Key": Config.CIS_API_KEY},
+                    timeout=8,
+                )
+                cis_resp.raise_for_status()
+                cis_items = cis_resp.json().get("items", [])
+                break
+            except Exception as e:
+                _log.warning("CIS inventory fetch failed (attempt %d): %s", _attempt + 1, e)
+                if _attempt == 2:
+                    _log.warning("CIS inventory unavailable after 3 attempts")
 
         # Fetch AgNet vendor catalog (deduplicated by productId)
         agnet_catalog = {}
@@ -76,16 +84,19 @@ def create_app():
     @app.route("/api/inventory", methods=["GET"])
     def api_inventory():
         """Proxy to CIS pooled inventory — used by JS if it needs fresh data."""
-        try:
-            resp = requests.get(
-                f"{Config.CIS_BASE_URL}/inventory/pooled",
-                headers={"X-API-Key": Config.CIS_API_KEY},
-                timeout=8,
-            )
-            resp.raise_for_status()
-            return jsonify(resp.json()), 200
-        except Exception as e:
-            return jsonify({"error": str(e)}), 503
+        last_err = None
+        for _ in range(3):
+            try:
+                resp = requests.get(
+                    f"{Config.CIS_BASE_URL}/inventory/pooled",
+                    headers={"X-API-Key": Config.CIS_API_KEY},
+                    timeout=8,
+                )
+                resp.raise_for_status()
+                return jsonify(resp.json()), 200
+            except Exception as e:
+                last_err = e
+        return jsonify({"error": str(last_err)}), 503
 
     # ------------------------------------------------------------------
     # Sprint 1 — team secret
@@ -422,7 +433,7 @@ def create_app():
 
         shipping_id = ship_result["shippingId"]
 
-        # Step 4: Stub handoff to Delivery Execution team
+        # Step 4: Submit to ODS via ods_client, then notify DE UI
         destination = {
             "addressLine1": body["addressLine1"],
             "addressLine2": body.get("addressLine2", ""),
@@ -431,6 +442,24 @@ def create_app():
             "postalCode": body["postalCode"],
         }
         submit_delivery(f2f_order_id, shipping_id, destination, drop_off)
+
+        # Step 4b: Register assignment in Delivery Execution store
+        address_str = body["addressLine1"]
+        if body.get("addressLine2"):
+            address_str += f", {body['addressLine2']}"
+        address_str += f", {body['city']}, {body['province']}"
+        if body.get("postalCode"):
+            address_str += f" {body['postalCode']}"
+
+        _deliveries.append({
+            "order_id": f2f_order_id,
+            "customer_name": session.get("client_id", "Customer"),
+            "address": address_str,
+            "items": [i.get("productName", i.get("productId", "")) for i in cart_items],
+            "status": "Assigned",
+            "eta": "TBD",
+            "driver": "Unassigned",
+        })
 
         # Step 5: Notify C&S — increment their delivery category counts
         user_token = session.get("user_token")
@@ -467,10 +496,63 @@ def create_app():
                     "f2fOrderId": f2f_order_id,
                     "shippingId": shipping_id,
                     "message": "Your order has been placed successfully!",
+                    "deliveryDashboardUrl": "/delivery",
                 }
             ),
             200,
         )
+
+    # ------------------------------------------------------------------
+    # Delivery Execution UI routes
+    # ------------------------------------------------------------------
+
+    @app.route("/delivery", methods=["GET"])
+    def delivery_dashboard():
+        return render_template("delivery_dashboard.html", deliveries=_deliveries)
+
+    @app.route("/delivery/<order_id>", methods=["GET"])
+    def delivery_details(order_id):
+        delivery = next((d for d in _deliveries if d["order_id"] == order_id), None)
+        if not delivery:
+            return jsonify({"error": "Delivery not found"}), 404
+        return render_template("delivery_details.html", delivery=delivery)
+
+    @app.route("/api/delivery/assignments", methods=["POST"])
+    def create_delivery_assignment():
+        data = request.get_json(silent=True) or {}
+        entry = {
+            "order_id": data.get("order_id"),
+            "customer_name": data.get("customer_name"),
+            "address": data.get("address"),
+            "items": data.get("items", []),
+            "status": data.get("status", "Assigned"),
+            "eta": data.get("eta", "TBD"),
+            "driver": data.get("driver", "Unassigned"),
+        }
+        _deliveries.append(entry)
+        return jsonify({"status": "success", "data": {"message": "Delivery assignment received", "delivery": entry}}), 201
+
+    @app.route("/api/deliveries", methods=["GET"])
+    def get_deliveries():
+        return jsonify({"status": "success", "data": _deliveries}), 200
+
+    @app.route("/api/delivery/status", methods=["POST"])
+    def update_delivery_status():
+        data = request.get_json(silent=True) or {}
+        delivery = next((d for d in _deliveries if d["order_id"] == data.get("order_id")), None)
+        if not delivery:
+            return jsonify({"status": "error", "error": {"code": "NOT_FOUND"}}), 404
+        delivery["status"] = data.get("status", delivery["status"])
+        return jsonify({"status": "success", "data": {"delivery": delivery}}), 200
+
+    @app.route("/api/delivery/complete", methods=["POST"])
+    def complete_delivery():
+        data = request.get_json(silent=True) or {}
+        delivery = next((d for d in _deliveries if d["order_id"] == data.get("order_id")), None)
+        if not delivery:
+            return jsonify({"status": "error", "error": {"code": "NOT_FOUND"}}), 404
+        delivery["status"] = "Delivered"
+        return jsonify({"status": "success", "data": {"delivery": delivery}}), 200
 
     return app
 
