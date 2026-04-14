@@ -4,6 +4,7 @@ from src.config import Config
 
 logger = logging.getLogger(__name__)
 
+
 def post_stock_change(cart_items: list) -> dict:
 
     """
