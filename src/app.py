@@ -271,7 +271,8 @@ def create_app():
             return jsonify({"error": "items must be a non-empty list"}), 400
 
         session["cart_items"] = items
-        session["user_token"] = body.get("userToken")
+        if body.get("userToken"):
+            session["user_token"] = body.get("userToken")
 
         return jsonify({"redirect_url": "/checkout"}), 200
 
