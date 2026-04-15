@@ -16,6 +16,7 @@ def app():
 def client(app):
     return app.test_client()
 
+
 @patch("src.app.get_pooled_inventory")
 def test_inventory_success(mock_cis, client):
 
@@ -51,17 +52,20 @@ def test_inventory_success(mock_cis, client):
     data = response.get_json()
     assert data["total"] == 2
 
+
 def test_inventory_invalid_page(client):
     response = client.get("/inventory/pooled?page=0&pageSize=10")
 
     assert response.status_code == 400
     assert "page must be >= 1" in response.get_json()["error"]
 
+
 def test_inventory_invalid_page_size(client):
     response = client.get("/inventory/pooled?page=1&pageSize=999")
 
     assert response.status_code == 400
     assert "pageSize must be between 1 and 500" in response.get_json()["error"]
+
 
 @patch("src.app.get_pooled_inventory")
 def test_inventory_cis_error(mock_cis, client):
@@ -75,9 +79,9 @@ def test_inventory_cis_error(mock_cis, client):
     assert data["error"] == "cis_error"
     assert "CIS down" in data["message"]
 
+
 def test_inventory_invalid_type(client):
     response = client.get("/inventory/pooled?page=abc&pageSize=10")
 
     assert response.status_code == 400
     assert "must be integers" in response.get_json()["error"]
-
