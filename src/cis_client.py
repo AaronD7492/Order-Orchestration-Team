@@ -104,6 +104,7 @@ def ship_locked_order(lock_order_id, lock_token):
         )
     return data
 
+
 def get_pooled_inventory(page: int = 1, page_size: int = 100):
     """
     Call CIS GET /inventory/pooled to read current stock levels.

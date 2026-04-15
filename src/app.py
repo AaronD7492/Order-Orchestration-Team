@@ -30,7 +30,6 @@ def create_app():
     def secret():
         secret_value = get_team_secret()
         return jsonify({"secret": secret_value}), 200
-    
 
     @app.route("/inventory/pooled", methods=["GET"])
     def inventory_pooled():
@@ -58,10 +57,6 @@ def create_app():
             return jsonify(result), 200
         except CISError as e:
             return jsonify({"error": "cis_error", "message": str(e)}), e.status_code
-    
-
-
-
     # ------------------------------------------------------------------
     # Checkout — initiate (called by Supply & Network homepage)
     # ------------------------------------------------------------------
@@ -485,7 +480,6 @@ def create_app():
 
 
 app = create_app()
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
