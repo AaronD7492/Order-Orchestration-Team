@@ -287,26 +287,38 @@ def create_app():
         # T3: Ship — immediately after lock, well within 60s TTL.
         # Lock is consumed by CIS at this point regardless of outcome,
         # so clear the pending lock from session before returning.
-        try:
-            ship_result = ship_locked_order(lock_order_id, lock_token)
-        except LockExpiredError:
+        ship_result = None
+        max_ship_retries = 3
+        last_ship_error = None
+        for attempt in range(max_ship_retries):
+            try:
+                ship_result = ship_locked_order(lock_order_id, lock_token)
+                break  # success
+            except LockExpiredError:
+                session.pop("pending_lock_order_id", None)
+                session.pop("pending_lock_token", None)
+                session.pop("pending_f2f_order_id", None)
+                return (
+                    jsonify(
+                        {
+                            "error": "lock_expired",
+                            "message": "Order could not be finalised. Please try again.",
+                        }
+                    ),
+                    409,
+                )
+            except CISError as e:
+                last_ship_error = e
+                logging.getLogger(__name__).warning(
+                    "CIS ship attempt %d/%d failed: %s", attempt + 1, max_ship_retries, e
+                )
+                continue
+
+        if ship_result is None:
             session.pop("pending_lock_order_id", None)
             session.pop("pending_lock_token", None)
             session.pop("pending_f2f_order_id", None)
-            return (
-                jsonify(
-                    {
-                        "error": "lock_expired",
-                        "message": "Order could not be finalised. Please try again.",
-                    }
-                ),
-                409,
-            )
-        except CISError as e:
-            session.pop("pending_lock_order_id", None)
-            session.pop("pending_lock_token", None)
-            session.pop("pending_f2f_order_id", None)
-            return jsonify({"error": "cis_error", "message": str(e)}), 503
+            return jsonify({"error": "cis_error", "message": str(last_ship_error)}), 503
 
         shipping_id = ship_result["shippingId"]
 
