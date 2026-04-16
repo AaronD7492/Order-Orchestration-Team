@@ -354,17 +354,18 @@ def create_app():
         session.pop("pending_f2f_order_id", None)
 
         # T4: Save order to database
+        user_token = session.get("user_token")
         try:
             items_to_save = [
                 {
                     "product_id": item["productId"],
                     "quantity": item["quantity"],
                     "unit": item["unit"],
-                    "price": item.get("price", 0.0) # Default price to 0.0 if not provided
+                    "price": item.get("price", 0.0)  # Default price to 0.0 if not provided
                 }
                 for item in cart_items
             ]
-            
+
             customer_id = None
             if user_token:
                 import jwt as pyjwt
@@ -374,7 +375,7 @@ def create_app():
                     algorithms=["HS256"],
                 )
                 customer_id = decoded.get("client_id")
-            
+
             if customer_id:
                 save_full_order(customer_id, items_to_save)
         except Exception as e:
@@ -391,7 +392,7 @@ def create_app():
         submit_delivery(f2f_order_id, shipping_id, destination, drop_off)
 
         # T5: Notify C&S — increment delivery category counts
-        user_token = session.get("user_token")
+
         client_id = session.get("client_id")  # pre-set by subscription flow (no JWT)
         if user_token or client_id:
             try:
