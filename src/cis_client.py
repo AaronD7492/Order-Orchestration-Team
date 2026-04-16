@@ -103,3 +103,60 @@ def ship_locked_order(lock_order_id, lock_token):
             response.status_code,
         )
     return data
+
+
+def get_pooled_inventory(page: int = 1, page_size: int = 100):
+    """
+    Call CIS GET /inventory/pooled to read current stock levels.
+
+    page:      page number (1-based, minimum 1)
+    page_size: items per page (default 100, max 500)
+
+    Returns on success:
+        {
+            "page": int,
+            "pageSize": int,
+            "total": int,
+            "hasNext": bool,
+            "items": [
+                {
+                    "productId": str,
+                    "productName": str,
+                    "hierarchy": [str],
+                    "quantityOnHand": float,
+                    "unit": str
+                },
+                ...
+            ]
+        }
+
+    Raises:
+        CISError — any CIS or network failure
+    """
+    url = f"{Config.CIS_BASE_URL}/inventory/pooled"
+    headers = {"X-API-Key": Config.CIS_API_KEY}
+    params = {"page": page, "pageSize": page_size}
+
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+    except requests.exceptions.RequestException as e:
+        raise CISError(f"CIS unreachable: {e}", 503)
+
+    try:
+        data = response.json()
+    except Exception:
+        data = {}
+
+    if response.status_code == 422:
+        raise CISError(
+            data.get("detail", "Invalid pagination parameters"),
+            422,
+        )
+
+    if not response.ok:
+        raise CISError(
+            data.get("message", f"CIS error {response.status_code}"),
+            response.status_code,
+        )
+
+    return data

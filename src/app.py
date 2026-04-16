@@ -9,6 +9,7 @@ from src.cis_client import (
     CISError,
     InsufficientStockError,
     LockExpiredError,
+    get_pooled_inventory,
     request_order_lock,
     ship_locked_order,
 )
@@ -30,6 +31,32 @@ def create_app():
         secret_value = get_team_secret()
         return jsonify({"secret": secret_value}), 200
 
+    @app.route("/inventory/pooled", methods=["GET"])
+    def inventory_pooled():
+        """
+        Proxy to CIS GET /inventory/pooled with pagination.
+        Used by the checkout UI to validate cart stock before submitting.
+
+        Query params:
+            page     (int, default 1, minimum 1)
+            pageSize (int, default 100, maximum 500)
+        """
+        try:
+            page = int(request.args.get("page", 1))
+            page_size = int(request.args.get("pageSize", 100))
+        except ValueError:
+            return jsonify({"error": "page and pageSize must be integers"}), 400
+
+        if page < 1:
+            return jsonify({"error": "page must be >= 1"}), 400
+        if not (1 <= page_size <= 500):
+            return jsonify({"error": "pageSize must be between 1 and 500"}), 400
+
+        try:
+            result = get_pooled_inventory(page, page_size)
+            return jsonify(result), 200
+        except CISError as e:
+            return jsonify({"error": "cis_error", "message": str(e)}), e.status_code
     # ------------------------------------------------------------------
     # Checkout — initiate (called by Supply & Network homepage)
     # ------------------------------------------------------------------
@@ -69,6 +96,10 @@ def create_app():
 
         session["cart_items"] = items
         session["user_token"] = body.get("userToken")
+
+        # Fallback: allow direct client_id for automated flows (e.g. C&S subscriptions)
+        if not body.get("userToken") and body.get("client_id"):
+            session["client_id"] = body.get("client_id")
 
         return jsonify({"redirect_url": "/checkout"}), 200
 
@@ -283,26 +314,38 @@ def create_app():
         # T3: Ship — immediately after lock, well within 60s TTL.
         # Lock is consumed by CIS at this point regardless of outcome,
         # so clear the pending lock from session before returning.
-        try:
-            ship_result = ship_locked_order(lock_order_id, lock_token)
-        except LockExpiredError:
+        ship_result = None
+        max_ship_retries = 3
+        last_ship_error = None
+        for attempt in range(max_ship_retries):
+            try:
+                ship_result = ship_locked_order(lock_order_id, lock_token)
+                break  # success
+            except LockExpiredError:
+                session.pop("pending_lock_order_id", None)
+                session.pop("pending_lock_token", None)
+                session.pop("pending_f2f_order_id", None)
+                return (
+                    jsonify(
+                        {
+                            "error": "lock_expired",
+                            "message": "Order could not be finalised. Please try again.",
+                        }
+                    ),
+                    409,
+                )
+            except CISError as e:
+                last_ship_error = e
+                logging.getLogger(__name__).warning(
+                    "CIS ship attempt %d/%d failed: %s", attempt + 1, max_ship_retries, e
+                )
+                continue
+
+        if ship_result is None:
             session.pop("pending_lock_order_id", None)
             session.pop("pending_lock_token", None)
             session.pop("pending_f2f_order_id", None)
-            return (
-                jsonify(
-                    {
-                        "error": "lock_expired",
-                        "message": "Order could not be finalised. Please try again.",
-                    }
-                ),
-                409,
-            )
-        except CISError as e:
-            session.pop("pending_lock_order_id", None)
-            session.pop("pending_lock_token", None)
-            session.pop("pending_f2f_order_id", None)
-            return jsonify({"error": "cis_error", "message": str(e)}), 503
+            return jsonify({"error": "cis_error", "message": str(last_ship_error)}), 503
 
         shipping_id = ship_result["shippingId"]
 
@@ -349,15 +392,17 @@ def create_app():
 
         # T5: Notify C&S — increment delivery category counts
         user_token = session.get("user_token")
-        if user_token:
+        client_id = session.get("client_id")  # pre-set by subscription flow (no JWT)
+        if user_token or client_id:
             try:
-                import jwt as pyjwt
-                decoded = pyjwt.decode(
-                    user_token,
-                    Config.CS_JWT_PASS,
-                    algorithms=["HS256"],
-                )
-                client_id = decoded.get("client_id")
+                if user_token and not client_id:
+                    import jwt as pyjwt
+                    decoded = pyjwt.decode(
+                        user_token,
+                        Config.CS_JWT_PASS,
+                        algorithms=["HS256"],
+                    )
+                    client_id = decoded.get("client_id")
                 if client_id:
                     produce = sum(1 for i in cart_items if i.get("category") == "Produce")
                     meat = sum(1 for i in cart_items if i.get("category") == "Meat")
@@ -377,7 +422,7 @@ def create_app():
 
         session.pop("cart_items", None)
         session.pop("user_token", None)
-
+        session.pop("client_id", None)
         return (
             jsonify(
                 {
@@ -450,7 +495,6 @@ def create_app():
 
 
 app = create_app()
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)

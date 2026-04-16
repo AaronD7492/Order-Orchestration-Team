@@ -15,4 +15,9 @@ docker run -d \
   -e DB_USER=orders \
   -e DB_PASSWORD=orchestrate \
   -e TEAM_NAME="Order Orchestration" \
+  -e CIS_API_KEY="S0MDKZEARVRd-_-ElR6viWycEosPIFNzTlaP8aTQIztJf9vT" \
+  -e CS_JWT_PASS="jwtpass123" \
+  -e CE_BASE_URL="http://localhost:5002" \
+  -e CE_API_KEY="bestTeam" \
+  -e SECRET_KEY="dev-secret" \
   order-orchestration-service
