@@ -14,7 +14,7 @@ from src.cis_client import (
     ship_locked_order,
 )
 from src.config import Config
-from src.db import get_team_secret
+from src.db import get_team_secret, save_full_order
 from src.ods_client import submit_delivery
 
 
@@ -353,19 +353,35 @@ def create_app():
         session.pop("pending_lock_token", None)
         session.pop("pending_f2f_order_id", None)
 
-        # Step 3.5: Notify CE integration of stock change
+        # T4: Save order to database
+        user_token = session.get("user_token")
         try:
-            from src.ce_client import post_stock_change
-            ce_result = post_stock_change(cart_items)
-            logging.getLogger(__name__).info(
-                "CE stock change posted — eventId: %s, status: %s",
-                ce_result.get("data", {}).get("eventId"),
-                ce_result.get("data", {}).get("status"),
-            )
-        except Exception as e:
-            logging.getLogger(__name__).warning("CE stock change failed: %s", e)
+            items_to_save = [
+                {
+                    "product_id": item["productId"],
+                    "quantity": item["quantity"],
+                    "unit": item["unit"],
+                    "price": item.get("price", 0.0)  # Default price to 0.0 if not provided
+                }
+                for item in cart_items
+            ]
 
-        # T4: Stub handoff to Delivery Execution team
+            customer_id = None
+            if user_token:
+                import jwt as pyjwt
+                decoded = pyjwt.decode(
+                    user_token,
+                    Config.CS_JWT_PASS,
+                    algorithms=["HS256"],
+                )
+                customer_id = decoded.get("client_id")
+
+            if customer_id:
+                save_full_order(customer_id, items_to_save)
+        except Exception as e:
+            logging.getLogger(__name__).warning("Failed to save order to database: %s", e)
+
+        # T5: Stub handoff to Delivery Execution team
         destination = {
             "addressLine1": body["addressLine1"],
             "addressLine2": body.get("addressLine2", ""),
@@ -376,7 +392,7 @@ def create_app():
         submit_delivery(f2f_order_id, shipping_id, destination, drop_off)
 
         # T5: Notify C&S — increment delivery category counts
-        user_token = session.get("user_token")
+
         client_id = session.get("client_id")  # pre-set by subscription flow (no JWT)
         if user_token or client_id:
             try:
