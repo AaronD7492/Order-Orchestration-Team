@@ -9,6 +9,7 @@ from src.cis_client import (
     CISError,
     InsufficientStockError,
     LockExpiredError,
+    get_pooled_inventory,
     request_order_lock,
     ship_locked_order,
 )
@@ -30,6 +31,32 @@ def create_app():
         secret_value = get_team_secret()
         return jsonify({"secret": secret_value}), 200
 
+    @app.route("/inventory/pooled", methods=["GET"])
+    def inventory_pooled():
+        """
+        Proxy to CIS GET /inventory/pooled with pagination.
+        Used by the checkout UI to validate cart stock before submitting.
+
+        Query params:
+            page     (int, default 1, minimum 1)
+            pageSize (int, default 100, maximum 500)
+        """
+        try:
+            page = int(request.args.get("page", 1))
+            page_size = int(request.args.get("pageSize", 100))
+        except ValueError:
+            return jsonify({"error": "page and pageSize must be integers"}), 400
+
+        if page < 1:
+            return jsonify({"error": "page must be >= 1"}), 400
+        if not (1 <= page_size <= 500):
+            return jsonify({"error": "pageSize must be between 1 and 500"}), 400
+
+        try:
+            result = get_pooled_inventory(page, page_size)
+            return jsonify(result), 200
+        except CISError as e:
+            return jsonify({"error": "cis_error", "message": str(e)}), e.status_code
     # ------------------------------------------------------------------
     # Checkout — initiate (called by Supply & Network homepage)
     # ------------------------------------------------------------------
@@ -453,7 +480,6 @@ def create_app():
 
 
 app = create_app()
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
