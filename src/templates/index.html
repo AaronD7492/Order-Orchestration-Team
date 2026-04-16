@@ -279,8 +279,8 @@
             </div>
             {% endfor %}
           {% else %}
-            <p style="color:var(--muted);font-family:Arial,sans-serif;font-size:0.9rem;">
-              Warehouse inventory unavailable. Please try again later.
+            <p id="warehouseFallbackMsg" style="color:var(--muted);font-family:Arial,sans-serif;font-size:0.9rem;">
+              Loading warehouse inventory…
             </p>
           {% endif %}
         </div>
@@ -329,6 +329,53 @@
     document.addEventListener("DOMContentLoaded", () => {
       updateCartBadge();
     });
+  </script>
+
+  <script>
+    // JS fallback: if server-side CIS render was empty, fetch and render inventory client-side
+    (function loadWarehouseIfEmpty() {
+      const grid = document.getElementById("warehouseGrid");
+      const msg  = document.getElementById("warehouseFallbackMsg");
+      if (!grid || grid.querySelectorAll(".product-card").length > 0) return;
+
+      function buildCard(item) {
+        const cat = (item.hierarchy && item.hierarchy[0]) || "Produce";
+        const low = item.quantityOnHand < 20 ? "stock-low" : "";
+        return `<div class="product-card" data-category="${cat}" data-product-id="${item.productId}" data-product-name="${item.productName}" data-unit="${item.unit}" data-stock="${item.quantityOnHand}">
+          <div class="product-img"><span>${cat}</span></div>
+          <div class="product-info">
+            <span class="product-category">${cat}</span>
+            <div class="product-name">${item.productName}</div>
+            <div class="stock-label ${low}">${item.quantityOnHand} ${item.unit} available</div>
+            <div class="product-footer">
+              <span class="product-price">Free</span>
+              <div class="qty-control">
+                <button class="qty-btn" onclick="adjustQty(this,-1)">−</button>
+                <input class="qty-input" type="number" value="1" min="0.1" step="0.5" max="${item.quantityOnHand}" />
+                <button class="qty-btn" onclick="adjustQty(this,1)">+</button>
+              </div>
+            </div>
+            <button class="add-btn" style="width:100%;margin-top:8px;" onclick="addToCart(this)">Add to Cart</button>
+          </div>
+        </div>`;
+      }
+
+      function attempt(retries) {
+        fetch("/api/inventory")
+          .then(r => r.ok ? r.json() : Promise.reject(r.status))
+          .then(data => {
+            const items = data.items || [];
+            if (items.length === 0) throw new Error("empty");
+            grid.innerHTML = items.map(buildCard).join("");
+          })
+          .catch(() => {
+            if (retries > 0) setTimeout(() => attempt(retries - 1), 800);
+            else if (msg) msg.textContent = "Warehouse inventory unavailable. Please try again later.";
+          });
+      }
+
+      attempt(10);
+    })();
   </script>
 </body>
 </html>

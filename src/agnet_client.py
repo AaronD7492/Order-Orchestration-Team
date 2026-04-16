@@ -44,6 +44,32 @@ def get_vendors():
         raise AgNetError(f"AgNet unavailable: {e}")
 
 
+def place_restock_order(vendor_id, items):
+    """
+    POST /orders to AgNet to reserve/request stock from a specific vendor.
+
+    items: list of {"productId": str, "quantity": int}
+
+    Returns the AgNet response JSON on success, e.g.:
+      {"orderId": ..., "status": "confirmed", "vendorId": ..., "manifest": [...]}
+    Raises AgNetError on failure.
+    """
+    url = f"{Config.AGNET_BASE_URL}/orders"
+    # AgNet schema: manifest (not items), quantityOrder (not quantity)
+    manifest = [
+        {"productId": i["productId"], "quantityOrder": i["quantity"]}
+        for i in items
+    ]
+    payload = {"vendorId": vendor_id, "manifest": manifest}
+    try:
+        resp = requests.post(url, json=payload, headers=_HEADERS, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.RequestException as e:
+        logger.error("AgNet POST /orders failed (vendor=%s): %s", vendor_id, e)
+        raise AgNetError(f"AgNet order failed: {e}")
+
+
 def get_product_catalog():
     """
     Build a deduplicated product catalog from all vendor manifests.

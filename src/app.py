@@ -6,6 +6,7 @@ import requests
 from flask import Flask, jsonify, redirect, render_template, request, session
 
 from src.agnet_client import AgNetError, get_product_catalog
+from src.restock import run_restock_pipeline
 from src.cis_client import (
     CISError,
     InsufficientStockError,
@@ -17,7 +18,8 @@ from src.cis_client import (
 )
 from src.cfp_client import sync_primary_files
 from src.config import Config
-from src.db import get_customer, get_team_secret
+from src.db import get_customer, get_customer_numeric_id, get_team_secret, save_full_order
+from src.order_store import get_orders, record_order
 from src.ods_client import submit_delivery
 
 
@@ -52,7 +54,7 @@ def create_app():
 
         # Fetch CIS pooled inventory (warehouse stock — authoritative for checkout)
         cis_items = []
-        for _attempt in range(3):
+        for _attempt in range(10):
             try:
                 cis_resp = requests.get(
                     f"{Config.CIS_BASE_URL}/inventory/pooled",
@@ -60,12 +62,13 @@ def create_app():
                     timeout=8,
                 )
                 cis_resp.raise_for_status()
-                cis_items = cis_resp.json().get("items", [])
+                all_items = cis_resp.json().get("items", [])
+                cis_items = [i for i in all_items if i.get("quantityOnHand", 0) > 0]
                 break
             except Exception as e:
                 _log.warning("CIS inventory fetch failed (attempt %d): %s", _attempt + 1, e)
-                if _attempt == 2:
-                    _log.warning("CIS inventory unavailable after 3 attempts")
+                if _attempt == 9:
+                    _log.warning("CIS inventory unavailable after 10 attempts")
 
         # Fetch AgNet vendor catalog (deduplicated by productId)
         agnet_catalog = {}
@@ -85,7 +88,7 @@ def create_app():
     def api_inventory():
         """Proxy to CIS pooled inventory — used by JS if it needs fresh data."""
         last_err = None
-        for _ in range(3):
+        for _ in range(10):
             try:
                 resp = requests.get(
                     f"{Config.CIS_BASE_URL}/inventory/pooled",
@@ -93,10 +96,51 @@ def create_app():
                     timeout=8,
                 )
                 resp.raise_for_status()
-                return jsonify(resp.json()), 200
+                data = resp.json()
+                data["items"] = [i for i in data.get("items", []) if i.get("quantityOnHand", 0) > 0]
+                return jsonify(data), 200
             except Exception as e:
                 last_err = e
         return jsonify({"error": str(last_err)}), 503
+
+    # ------------------------------------------------------------------
+    # Restock pipeline — manual trigger
+    # ------------------------------------------------------------------
+
+    @app.route("/api/restock", methods=["POST"])
+    def api_restock():
+        """
+        Manually trigger the restock pipeline.
+
+        Scans CIS inventory for products with quantityOnHand < 10 and
+        places purchase orders with AgNet suppliers for each low-stock item.
+
+        Returns a JSON summary:
+        {
+            "checked":   int,   # total products inspected
+            "low_stock": int,   # products below threshold
+            "restocked": int,   # successful AgNet orders placed
+            "skipped":   int,   # low-stock items with no available supplier
+            "failed":    int,   # supplier orders that errored
+            "actions":   [...]  # per-product detail
+        }
+        """
+        _log = logging.getLogger(__name__)
+        try:
+            summary = run_restock_pipeline()
+        except Exception as e:
+            _log.error("Restock pipeline error: %s", e)
+            return jsonify({"error": "restock_pipeline_error", "message": str(e)}), 500
+
+        status_code = 200
+        if summary.get("low_stock", 0) == 0:
+            status_code = 200          # all stock healthy — nothing to do
+        elif summary.get("failed", 0) > 0 and summary.get("restocked", 0) == 0:
+            status_code = 502          # every attempt failed
+        elif summary.get("failed", 0) > 0:
+            status_code = 207          # partial success
+
+        return jsonify(summary), status_code
 
     # ------------------------------------------------------------------
     # Sprint 1 — team secret
@@ -104,7 +148,11 @@ def create_app():
 
     @app.route("/secret", methods=["GET"])
     def secret():
-        secret_value = get_team_secret()
+        try:
+            secret_value = get_team_secret()
+        except Exception as e:
+            logging.getLogger(__name__).warning("DB error fetching team secret: %s", e)
+            return jsonify({"error": "Service unavailable. Please try again."}), 503
         return jsonify({"secret": secret_value}), 200
 
     # ------------------------------------------------------------------
@@ -296,10 +344,7 @@ def create_app():
         """Render the checkout page, hydrated with cart items and CFP address."""
         cart_items = session.get("cart_items")
         if not cart_items:
-            return (
-                jsonify({"error": "No cart found. Please start from the store."}),
-                400,
-            )
+            return redirect("/")
 
         # Always pre-fill address from CFP using the logged-in client_id
         prefill = {}
@@ -400,7 +445,16 @@ def create_app():
         try:
             lock_result = request_order_lock(f2f_order_id, shipping_address, manifest)
         except InsufficientStockError as e:
-            # TODO: Trigger restock pipeline (P&I / AgNet) — deferred pending team discussion
+            # Trigger restock pipeline in the background so future orders can succeed
+            try:
+                restock_summary = run_restock_pipeline()
+                logging.getLogger(__name__).info(
+                    "Restock pipeline triggered on out-of-stock: %s", restock_summary
+                )
+            except Exception as restock_err:
+                logging.getLogger(__name__).warning(
+                    "Restock pipeline failed after out-of-stock: %s", restock_err
+                )
             return jsonify({"error": "out_of_stock", "message": str(e)}), 409
         except CISError as e:
             return jsonify({"error": "cis_error", "message": str(e)}), 503
@@ -481,6 +535,36 @@ def create_app():
             except Exception as e:
                 logging.getLogger(__name__).warning("C&S update-delivery failed: %s", e)
 
+        # Persist order to database
+        try:
+            customer_numeric_id = get_customer_numeric_id(session.get("client_id"))
+            if customer_numeric_id is not None:
+                db_items = [
+                    {
+                        "product_id": None,
+                        "quantity": item["quantity"],
+                        "unit": item["unit"],
+                        "price": 0.0,
+                    }
+                    for item in cart_items
+                ]
+                save_full_order(customer_numeric_id, db_items)
+        except Exception as e:
+            logging.getLogger(__name__).warning("Failed to persist order to DB: %s", e)
+
+        # Record full order details locally for order history
+        try:
+            record_order(
+                client_id=session.get("client_id", "unknown"),
+                f2f_order_id=f2f_order_id,
+                shipping_id=shipping_id,
+                items=cart_items,
+                address=address_str,
+                drop_off=drop_off,
+            )
+        except Exception as e:
+            logging.getLogger(__name__).warning("Failed to record order history: %s", e)
+
         # Clear cart after successful order — keep user logged in
         session.pop("cart_items", None)
 
@@ -496,6 +580,97 @@ def create_app():
             ),
             200,
         )
+
+    # ------------------------------------------------------------------
+    # Subscriptions
+    # ------------------------------------------------------------------
+
+    @app.route("/subscriptions", methods=["GET"])
+    def subscriptions():
+        client_id = session.get("client_id")
+        if not client_id:
+            return redirect("/login")
+        return render_template("subscriptions.html", client_id=client_id)
+
+    @app.route("/api/subscriptions", methods=["GET"])
+    def api_get_subscriptions():
+        """Proxy GET to C&S — injects client_id from Flask session."""
+        _log = logging.getLogger(__name__)
+        client_id = session.get("client_id")
+        if not client_id:
+            return jsonify({"error": "Not logged in"}), 401
+        try:
+            resp = requests.get(
+                f"{Config.CS_BASE_URL}/api/get_subscriptions",
+                params={"client_id": client_id},
+                timeout=8,
+            )
+            resp.raise_for_status()
+            return jsonify(resp.json()), resp.status_code
+        except requests.HTTPError as e:
+            _log.warning("C&S get_subscriptions error: %s", e)
+            return jsonify({"error": "Failed to fetch subscriptions from C&S", "detail": str(e)}), resp.status_code
+        except Exception as e:
+            _log.warning("C&S get_subscriptions unreachable: %s", e)
+            return jsonify({"error": "subscription_service_unavailable", "message": "The subscription service is temporarily unavailable."}), 503
+
+    @app.route("/api/subscriptions", methods=["PATCH"])
+    def api_patch_subscription():
+        """Proxy PATCH to C&S — updates frequency or quantity for a subscription."""
+        _log = logging.getLogger(__name__)
+        client_id = session.get("client_id")
+        if not client_id:
+            return jsonify({"error": "Not logged in"}), 401
+        body = request.get_json(silent=True) or {}
+        try:
+            resp = requests.patch(
+                f"{Config.CS_BASE_URL}/api/v1/subscriptions",
+                json=body,
+                timeout=8,
+            )
+            resp.raise_for_status()
+            return jsonify(resp.json()), resp.status_code
+        except requests.HTTPError as e:
+            _log.warning("C&S patch subscription error: %s", e)
+            return jsonify({"error": "Failed to update subscription", "detail": str(e)}), resp.status_code
+        except Exception as e:
+            _log.warning("C&S patch subscription error: %s", e)
+            return jsonify({"error": "C&S service unavailable"}), 503
+
+    @app.route("/api/subscriptions", methods=["DELETE"])
+    def api_delete_subscription():
+        """Proxy DELETE to C&S — cancels a subscription."""
+        _log = logging.getLogger(__name__)
+        client_id = session.get("client_id")
+        if not client_id:
+            return jsonify({"error": "Not logged in"}), 401
+        body = request.get_json(silent=True) or {}
+        try:
+            resp = requests.delete(
+                f"{Config.CS_BASE_URL}/api/v1/subscriptions",
+                json=body,
+                timeout=8,
+            )
+            resp.raise_for_status()
+            return jsonify(resp.json()), resp.status_code
+        except requests.HTTPError as e:
+            _log.warning("C&S delete subscription error: %s", e)
+            return jsonify({"error": "Failed to cancel subscription", "detail": str(e)}), resp.status_code
+        except Exception as e:
+            _log.warning("C&S delete subscription error: %s", e)
+            return jsonify({"error": "C&S service unavailable"}), 503
+
+    # ------------------------------------------------------------------
+    # Order History
+    # ------------------------------------------------------------------
+
+    @app.route("/order-history", methods=["GET"])
+    def order_history():
+        client_id = session.get("client_id")
+        if not client_id:
+            return redirect("/login")
+        orders = get_orders(client_id)
+        return render_template("order_history.html", orders=orders, client_id=client_id)
 
     # ------------------------------------------------------------------
     # Delivery Execution UI routes
@@ -515,10 +690,14 @@ def create_app():
     @app.route("/api/delivery/assignments", methods=["POST"])
     def create_delivery_assignment():
         data = request.get_json(silent=True) or {}
+        order_id = data.get("order_id")
+        address = data.get("address")
+        if not order_id or not address:
+            return jsonify({"status": "error", "error": {"code": "MISSING_FIELDS", "message": "order_id and address are required"}}), 400
         entry = {
-            "order_id": data.get("order_id"),
+            "order_id": order_id,
             "customer_name": data.get("customer_name"),
-            "address": data.get("address"),
+            "address": address,
             "items": data.get("items", []),
             "status": data.get("status", "Assigned"),
             "eta": data.get("eta", "TBD"),

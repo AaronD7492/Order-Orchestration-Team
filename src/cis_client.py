@@ -1,3 +1,6 @@
+import uuid
+from datetime import datetime, timezone
+
 import requests
 from src.config import Config
 
@@ -16,7 +19,7 @@ class LockExpiredError(CISError):
     pass
 
 
-def _post_with_retry(url, headers, payload, retries=3):
+def _post_with_retry(url, headers, payload, retries=10):
     """POST to CIS, retrying on 5xx up to `retries` times."""
     last_exc = None
     for _ in range(retries):
@@ -112,7 +115,7 @@ def request_order_lock(f2f_order_id, shipping_address, manifest):
         "manifest": manifest,
     }
 
-    response = _post_with_retry(url, headers, payload, retries=5)
+    response = _post_with_retry(url, headers, payload)
 
     try:
         data = response.json()
@@ -151,7 +154,7 @@ def ship_locked_order(lock_order_id, lock_token):
     headers = {"X-API-Key": Config.CIS_API_KEY}
     payload = {"lockOrderId": lock_order_id, "lockToken": lock_token}
 
-    response = _post_with_retry(url, headers, payload, retries=5)
+    response = _post_with_retry(url, headers, payload)
 
     try:
         data = response.json()
@@ -172,6 +175,47 @@ def ship_locked_order(lock_order_id, lock_token):
     if not response.ok:
         raise CISError(
             data.get("message", f"CIS error {response.status_code}"),
+            response.status_code,
+        )
+    return data
+
+
+def create_vendor_reservation(vendor_id, items):
+    """
+    Call CIS POST /vendors/reservations to register an incoming shipment.
+
+    Called after a successful AgNet restock order so CIS warehouse levels
+    are updated to reflect the incoming stock.
+
+    items: list of dicts — productId, hierarchy (3-element list), productName, quantity, unit
+
+    Returns CIS response JSON on success. Raises CISError on failure.
+    """
+    url = f"{Config.CIS_BASE_URL}/vendors/reservations"
+    headers = {"X-API-Key": Config.CIS_API_KEY}
+    payload = {
+        "shipmentId": f"SHIP-{uuid.uuid4().hex[:12].upper()}",
+        "vendorId": vendor_id,
+        "shipmentDate": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "items": [
+            {
+                "productId": i["productId"],
+                "hierarchy": i["hierarchy"],
+                "productName": i["productName"],
+                "quantity": i["quantity"],
+                "unit": i["unit"],
+            }
+            for i in items
+        ],
+    }
+    response = _post_with_retry(url, headers, payload)
+    try:
+        data = response.json()
+    except Exception:
+        data = {}
+    if not response.ok:
+        raise CISError(
+            data.get("message", f"CIS reservation error {response.status_code}"),
             response.status_code,
         )
     return data
