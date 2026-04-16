@@ -13,7 +13,7 @@ from src.cis_client import (
     ship_locked_order,
 )
 from src.config import Config
-from src.db import get_team_secret
+from src.db import get_team_secret, save_full_order
 from src.ods_client import submit_delivery
 
 
@@ -310,7 +310,34 @@ def create_app():
         session.pop("pending_lock_token", None)
         session.pop("pending_f2f_order_id", None)
 
-        # T4: Stub handoff to Delivery Execution team
+        # T4: Save order to database
+        try:
+            items_to_save = [
+                {
+                    "product_id": item["productId"],
+                    "quantity": item["quantity"],
+                    "unit": item["unit"],
+                    "price": item.get("price", 0.0) # Default price to 0.0 if not provided
+                }
+                for item in cart_items
+            ]
+            
+            customer_id = None
+            if user_token:
+                import jwt as pyjwt
+                decoded = pyjwt.decode(
+                    user_token,
+                    Config.CS_JWT_PASS,
+                    algorithms=["HS256"],
+                )
+                customer_id = decoded.get("client_id")
+            
+            if customer_id:
+                save_full_order(customer_id, items_to_save)
+        except Exception as e:
+            logging.getLogger(__name__).warning("Failed to save order to database: %s", e)
+
+        # T5: Stub handoff to Delivery Execution team
         destination = {
             "addressLine1": body["addressLine1"],
             "addressLine2": body.get("addressLine2", ""),
